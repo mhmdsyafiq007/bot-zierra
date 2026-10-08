@@ -1,0 +1,15 @@
+# File yang dibuat di samping exe saat bot jalan — jangan ikut ter-commit,
+# karena isinya data pribadi (sesi login Telegram, pengaturan lokal).
+config.json
+kawalu_shared.session
+kawalu_shared.session-journal
+*.session
+*.session-journal
+
+# Hasil build PyInstaller
+build/
+dist/
+*.spec
+
+__pycache__/
+*.pyc
