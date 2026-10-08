@@ -1226,9 +1226,14 @@ class App(tk.Tk):
             self.auto_tawar_entries[jenis] = {}
 
             if jenis in ("Parafrase", "Humanizer"):
+                # Target berbentuk RENTANG (beda dari Auto Terima yang
+                # cuma "di atas X"), dan harga client disyaratkan DI
+                # BAWAH persentase ini — fallback untuk job yang kurang
+                # bagus buat Terima langsung tapi masih worth ditawar.
                 field_defs = [
-                    ("min_target", "Target min (%)", settings.get("min_target")),
-                    ("min_client_pct", "Client min (%)", settings.get("min_client_pct")),
+                    ("target_min", "Target min (%)", settings.get("target_min")),
+                    ("target_max", "Target max (%)", settings.get("target_max")),
+                    ("max_client_pct", "Client max (%)", settings.get("max_client_pct")),
                     ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
                 ]
@@ -1249,7 +1254,7 @@ class App(tk.Tk):
 
             else:  # Fix File
                 field_defs = [
-                    ("min_client_pct", "Client min (%)", settings.get("min_client_pct")),
+                    ("max_client_pct", "Client max (%)", settings.get("max_client_pct")),
                     ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
                 ]
@@ -1344,8 +1349,9 @@ class App(tk.Tk):
                 if jenis in ("Parafrase", "Humanizer"):
                     s = {
                         "enabled": enabled,
-                        "min_target": read(entries["min_target"]),
-                        "min_client_pct": read(entries["min_client_pct"]),
+                        "target_min": read(entries["target_min"], allow_blank=True),
+                        "target_max": read(entries["target_max"], allow_blank=True),
+                        "max_client_pct": read(entries["max_client_pct"]),
                         "deadline_min_h": read(entries["deadline_min_h"]),
                         "deadline_max_h": read(entries["deadline_max_h"]),
                     }
@@ -1355,7 +1361,7 @@ class App(tk.Tk):
                 else:  # Fix File
                     s = {
                         "enabled": enabled,
-                        "min_client_pct": read(entries["min_client_pct"]),
+                        "max_client_pct": read(entries["max_client_pct"]),
                         "deadline_min_h": read(entries["deadline_min_h"]),
                         "deadline_max_h": read(entries["deadline_max_h"]),
                         "service_include": [
@@ -1694,16 +1700,22 @@ class App(tk.Tk):
                 out.update({k: saved[k] for k in defaults if k in saved})
             return out
 
+        # Beda arah dari Auto Terima: target berbentuk RENTANG (bukan cuma
+        # "di atas X"), dan harga client disyaratkan DI BAWAH persentase
+        # tertentu dari estimasi — ini memang fallback untuk job yang
+        # harganya kurang bagus buat Terima langsung tapi masih worth
+        # ditawar (lihat _evaluate_auto_tawar_conditions).
         parafrase_defaults = {
-            "enabled": False, "min_target": 10, "min_client_pct": 30,
-            "deadline_min_h": 2, "deadline_max_h": 48,
+            "enabled": False, "target_min": 0, "target_max": 20,
+            "max_client_pct": 70, "deadline_min_h": 2, "deadline_max_h": 48,
         }
         humanizer_defaults = {
-            "enabled": False, "min_target": 10, "min_client_pct": 30,
-            "deadline_min_h": 2, "deadline_max_h": 48, "max_word_count": 3000,
+            "enabled": False, "target_min": 0, "target_max": 20,
+            "max_client_pct": 70, "deadline_min_h": 2, "deadline_max_h": 48,
+            "max_word_count": 3000,
         }
         fixfile_defaults = {
-            "enabled": False, "min_client_pct": 30,
+            "enabled": False, "max_client_pct": 70,
             "deadline_min_h": 2, "deadline_max_h": 48,
             "service_include": [], "service_exclude": [],
         }
@@ -2329,16 +2341,90 @@ class App(tk.Tk):
             return False
         return self._evaluate_auto_conditions(info, settings)
 
+    def _evaluate_auto_tawar_conditions(self, info, settings):
+        """Syarat Auto Tawar beda ARAH dari Auto Terima (lihat
+        _evaluate_auto_conditions): target berbentuk RENTANG (min & max,
+        bukan cuma "di atas X"), dan harga client disyaratkan DI BAWAH
+        persentase tertentu dari estimasi — ini memang fallback untuk job
+        yang kurang bagus buat Terima langsung tapi masih worth ditawar.
+        Deadline & syarat service Fix File tetap sama logikanya."""
+        jenis = info.get("jenis")
+        try:
+            client = float(info.get("harga_client_raw"))
+            estimasi = float(info.get("harga_estimasi_raw"))
+        except (TypeError, ValueError):
+            return False
+        if estimasi <= 0:
+            return False
+
+        # Syarat harga (semua jenis): client harus DI BAWAH persentase ini.
+        max_client_pct = settings.get("max_client_pct")
+        if max_client_pct not in (None, "") and (client / estimasi) * 100 >= float(max_client_pct):
+            return False
+
+        # Syarat deadline (semua jenis) — sama seperti Auto Terima.
+        deadline_dt = info.get("deadline_dt")
+        if deadline_dt is None:
+            return False
+        from datetime import datetime as _dt
+        hours_left = (deadline_dt - _dt.now(deadline_dt.tzinfo)).total_seconds() / 3600
+        dmin, dmax = settings.get("deadline_min_h"), settings.get("deadline_max_h")
+        if dmin not in (None, "") and dmax not in (None, ""):
+            if not (float(dmin) <= hours_left <= float(dmax)):
+                return False
+
+        if jenis in ("Parafrase", "Humanizer"):
+            try:
+                target = float(info.get("target_raw"))
+            except (TypeError, ValueError):
+                return False
+            tmin = settings.get("target_min")
+            if tmin not in (None, "") and target < float(tmin):
+                return False
+            tmax = settings.get("target_max")
+            if tmax not in (None, "") and target > float(tmax):
+                return False
+
+            if jenis == "Humanizer":
+                max_words = settings.get("max_word_count")
+                if max_words not in (None, ""):
+                    try:
+                        words = float(info.get("word_count_raw"))
+                    except (TypeError, ValueError):
+                        return False
+                    if words >= float(max_words):
+                        return False
+
+        elif jenis == "Fix File":
+            service_list = info.get("service_list") or []
+            norm_services = {s.strip().lower() for s in service_list}
+
+            include = settings.get("service_include") or []
+            if include:
+                norm_include = {s.strip().lower() for s in include}
+                if not (norm_services & norm_include):
+                    return False
+
+            exclude = settings.get("service_exclude") or []
+            if exclude:
+                norm_exclude = {s.strip().lower() for s in exclude}
+                if norm_services & norm_exclude:
+                    return False
+
+        return True
+
     def _check_auto_tawar(self, info):
         """Sama seperti _check_auto_terima tapi pakai syarat Auto Tawar
-        (self.auto_tawar_jenis_settings) yang terpisah total."""
+        (self.auto_tawar_jenis_settings) yang terpisah total, dan evaluasi
+        arah syaratnya (_evaluate_auto_tawar_conditions) beda dari Auto
+        Terima — lihat komentar di fungsi itu."""
         if not self.auto_tawar_enabled:
             return False
         jenis = info.get("jenis")
         settings = self.auto_tawar_jenis_settings.get(jenis)
         if not settings or not settings.get("enabled"):
             return False
-        return self._evaluate_auto_conditions(info, settings)
+        return self._evaluate_auto_tawar_conditions(info, settings)
 
     def _maybe_auto_actions(self, info, token):
         """Auto Terima dicek DULUAN; Auto Tawar jadi fallback — hanya
