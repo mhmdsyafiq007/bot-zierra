@@ -104,6 +104,18 @@ def compute_tawar_price(estimasi):
     return (mentah // 1000) * 1000
 
 
+def compute_tawar_price_from_client(harga_client, pct):
+    """Hitung harga tawar sebagai PERSENTASE dari Harga Client (bukan
+    potongan bracket dari Harga Estimasi seperti compute_tawar_price di
+    atas) — dipakai kalau field "Target Tawar (%)" di panel Auto Tawar
+    diisi user. Dibulatkan ke bawah ke ribuan (3 digit terakhir
+    di-0-kan), sama seperti compute_tawar_price."""
+    harga_client = float(harga_client)
+    pct = float(pct)
+    mentah = max(harga_client * pct / 100, 0)
+    return int(mentah // 1000) * 1000
+
+
 # Struktur JSON order-detail beda tiap koleksi. Path pakai titik untuk
 # field bersarang (mis. "price.by_client"). Beberapa alternatif dicoba
 # berurutan, dipakai yang pertama ada isinya.
@@ -391,13 +403,20 @@ class BrowserActions:
                 return False, str(exc)
 
     # ------------------------------------------------------------ Tawar (DOM)
-    def do_tawar(self, url=None, estimasi=None, _retry=True):
+    def do_tawar(self, url=None, estimasi=None, harga_tawar=None, _retry=True):
         """Belum ada endpoint API untuk Tawar yang terkonfirmasi, jadi
         tetap lewat klik DOM di tab visual. Kalau `estimasi` (angka Harga
         Estimasi) sudah diketahui dari popup, dipakai langsung tanpa
         scrape ulang; kalau tidak, di-scrape dari halaman seperti
-        sebelumnya. Harga yang diisi ke kolom "Tawar jadi" dihitung
-        lewat compute_tawar_price(), bukan Harga Estimasi mentah.
+        sebelumnya.
+
+        Harga yang diisi ke kolom "Tawar jadi":
+        - kalau `harga_tawar` sudah diisi (dihitung di listener_gui dari
+          field "Target Tawar (%)" — persentase dari Harga Client), itu
+          yang dipakai LANGSUNG, tidak dihitung ulang di sini;
+        - kalau tidak, dihitung dari Harga Estimasi lewat
+          compute_tawar_price() (potongan bracket) seperti sebelumnya.
+
         _retry=True -> kalau gagal karena tab/sesi bermasalah, tab dibuka
         ulang dan dicoba sekali lagi otomatis sebelum nyerah."""
         with self.view.lock:
@@ -406,7 +425,7 @@ class BrowserActions:
                     self.open_job(url)  # tidak reload kalau sudah di URL ini
                 driver = self._focus_last_job()
 
-                if estimasi is None:
+                if harga_tawar is None and estimasi is None:
                     # Ambil Harga Estimasi dari halaman SEBELUM modal
                     # dibuka, dipakai sebagai dasar hitungan tawaran.
                     try:
@@ -429,12 +448,12 @@ class BrowserActions:
 
                 overlay = self._overlay(driver)
 
-                if not estimasi:
-                    msg = "Harga Estimasi tidak terbaca — isi manual di jendela Chrome."
-                    self.log(f"[BROWSER] {msg}", "err")
-                    return False, msg
-
-                harga_tawar = compute_tawar_price(estimasi)
+                if harga_tawar is None:
+                    if not estimasi:
+                        msg = "Harga Estimasi tidak terbaca — isi manual di jendela Chrome."
+                        self.log(f"[BROWSER] {msg}", "err")
+                        return False, msg
+                    harga_tawar = compute_tawar_price(estimasi)
 
                 field = WebDriverWait(driver, WAIT_TIMEOUT).until(
                     lambda d: overlay.find_element(By.XPATH, ".//input")
@@ -448,7 +467,8 @@ class BrowserActions:
                 )
                 submit.click()
 
-                msg = f"Tawar dikirim: Rp{harga_tawar} (estimasi Rp{estimasi})"
+                dasar = f" (estimasi Rp{estimasi})" if estimasi else " (dari % Harga Client)"
+                msg = f"Tawar dikirim: Rp{harga_tawar}{dasar}"
                 self.log(f"[BROWSER] {msg}", "hit")
                 return True, msg
             except TimeoutException:
@@ -456,7 +476,7 @@ class BrowserActions:
                     self.log("[BROWSER] Tombol Tawar tidak ditemukan — "
                              "membuka ulang tab & mencoba sekali lagi...", "err")
                     self._reset_channel(self.view)
-                    return self.do_tawar(url, estimasi, _retry=False)
+                    return self.do_tawar(url, estimasi, harga_tawar, _retry=False)
                 msg = ("Tombol Tawar tidak ditemukan — pastikan tab job "
                        "masih terbuka di jendela Chrome debug.")
                 self.log(f"[BROWSER] {msg}", "err")
@@ -466,7 +486,7 @@ class BrowserActions:
                     self.log(f"[BROWSER] Tab/sesi bermasalah ({exc}) — membuka "
                              "ulang tab & mencoba sekali lagi...", "err")
                     self._reset_channel(self.view)
-                    return self.do_tawar(url, estimasi, _retry=False)
+                    return self.do_tawar(url, estimasi, harga_tawar, _retry=False)
                 self.log(f"[BROWSER] Gagal Tawar: {exc}", "err")
                 return False, str(exc)
 

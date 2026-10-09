@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
-  "notes": "Rilis awal."
+  "notes": "Catatan Job Proses kini cuma mencatat job yang benar-benar masuk proses (bukan sekadar waiting-payment), dan berhenti memantau kalau order expired. Panel Auto Terima/Auto Tawar sekarang full tersembunyi (termasuk baris Jenis & Delay) saat Aktifkan dimatikan. Tambah syarat Auto Terima: Client min (Rp) — harga client minimal absolut, terpisah dari perbandingan %. Perbaikan boundary: target/persentase yang PAS SAMA dengan nilai minimal kini lolos (sebelumnya malah ditolak)."
 }

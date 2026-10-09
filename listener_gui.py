@@ -105,7 +105,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -897,32 +897,41 @@ class App(tk.Tk):
             activeforeground=TEXT, font=(FONT, 9), anchor="w",
         ).pack(side="left")
 
-        tk.Label(toggle_row, text="Delay (ms)", bg=CARD, fg=MUTED,
+        # Dibungkus dalam satu frame supaya bisa disembunyikan sekaligus
+        # (pack_forget) kalau "Aktifkan" dimatikan — lihat
+        # _refresh_auto_visibility().
+        self.auto_delay_box = tk.Frame(toggle_row, bg=CARD)
+
+        tk.Label(self.auto_delay_box, text="Delay (ms)", bg=CARD, fg=MUTED,
                  font=(FONT, 8)).pack(side="left", padx=(14, 4))
 
         self.e_auto_delay_min = tk.Entry(
-            toggle_row, bg=FIELD, fg=TEXT, relief="flat", width=5,
+            self.auto_delay_box, bg=FIELD, fg=TEXT, relief="flat", width=5,
             font=(FONT, 10), insertbackground=ACCENT,
         )
         self.e_auto_delay_min.insert(0, str(int(self.auto_delay_min_ms)))
         self.e_auto_delay_min.pack(side="left", ipady=3)
 
-        tk.Label(toggle_row, text="-", bg=CARD, fg=MUTED,
+        tk.Label(self.auto_delay_box, text="-", bg=CARD, fg=MUTED,
                  font=(FONT, 9)).pack(side="left", padx=3)
 
         self.e_auto_delay_max = tk.Entry(
-            toggle_row, bg=FIELD, fg=TEXT, relief="flat", width=5,
+            self.auto_delay_box, bg=FIELD, fg=TEXT, relief="flat", width=5,
             font=(FONT, 10), insertbackground=ACCENT,
         )
         self.e_auto_delay_max.insert(0, str(int(self.auto_delay_max_ms)))
         self.e_auto_delay_max.pack(side="left", ipady=3)
 
-        RoundedButton(toggle_row, "Simpan", self.save_auto_terima_form,
-                     width=90, height=30, fill=ACCENT, bg=CARD).pack(
-            side="left", padx=(14, 0))
+        self.auto_delay_box.pack(side="left")
+
+        self.auto_simpan_btn = RoundedButton(
+            toggle_row, "Simpan", self.save_auto_terima_form,
+            width=90, height=30, fill=ACCENT, bg=CARD)
+        self.auto_simpan_btn.pack(side="left", padx=(14, 0))
 
         # --- baris checkbox pemilihan jenis (multiselect) ---
-        jenis_row = tk.Frame(panel, bg=CARD)
+        self.auto_jenis_row = tk.Frame(panel, bg=CARD)
+        jenis_row = self.auto_jenis_row
         jenis_row.grid(row=2, column=0, sticky="w", pady=(10, 0))
 
         tk.Label(jenis_row, text="Jenis:", bg=CARD, fg=MUTED,
@@ -974,6 +983,7 @@ class App(tk.Tk):
                 field_defs = [
                     ("min_target", "Target min (%)", settings.get("min_target")),
                     ("min_client_pct", "Client min (%)", settings.get("min_client_pct")),
+                    ("min_client_price", "Client min (Rp)", settings.get("min_client_price")),
                     ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
                 ]
@@ -996,6 +1006,7 @@ class App(tk.Tk):
                    # perbandingan harga + deadline + pilihan layanan.
                 field_defs = [
                     ("min_client_pct", "Client min (%)", settings.get("min_client_pct")),
+                    ("min_client_price", "Client min (Rp)", settings.get("min_client_price")),
                     ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
                 ]
@@ -1060,12 +1071,18 @@ class App(tk.Tk):
         self._refresh_auto_visibility()
 
     def _refresh_auto_visibility(self):
-        """Semua panel syarat tersembunyi kalau Auto Terima dimatikan.
-        Kalau aktif, hanya panel jenis yang dicentang yang ditampilkan —
-        bisa lebih dari satu sekaligus (multiselect)."""
+        """Semua panel syarat, baris "Jenis:", dan field Delay tersembunyi
+        kalau Auto Terima dimatikan. Kalau aktif, hanya panel jenis yang
+        dicentang yang ditampilkan — bisa lebih dari satu sekaligus
+        (multiselect)."""
         if not self.auto_enabled_var.get():
+            self.auto_delay_box.pack_forget()
+            self.auto_jenis_row.grid_remove()
             self.auto_fields_frame.grid_remove()
             return
+        if not self.auto_delay_box.winfo_ismapped():
+            self.auto_delay_box.pack(side="left", before=self.auto_simpan_btn)
+        self.auto_jenis_row.grid()
         self.auto_fields_frame.grid()
 
         for jenis, sub in self.auto_jenis_panels.items():
@@ -1096,6 +1113,8 @@ class App(tk.Tk):
                         "enabled": enabled,
                         "min_target": read(entries["min_target"]),
                         "min_client_pct": read(entries["min_client_pct"]),
+                        "min_client_price": read(entries["min_client_price"],
+                                                 allow_blank=True),
                         "deadline_min_h": read(entries["deadline_min_h"]),
                         "deadline_max_h": read(entries["deadline_max_h"]),
                     }
@@ -1106,6 +1125,8 @@ class App(tk.Tk):
                     s = {
                         "enabled": enabled,
                         "min_client_pct": read(entries["min_client_pct"]),
+                        "min_client_price": read(entries["min_client_price"],
+                                                 allow_blank=True),
                         "deadline_min_h": read(entries["deadline_min_h"]),
                         "deadline_max_h": read(entries["deadline_max_h"]),
                         "service_include": [
@@ -1157,31 +1178,37 @@ class App(tk.Tk):
             activeforeground=TEXT, font=(FONT, 9), anchor="w",
         ).pack(side="left")
 
-        tk.Label(toggle_row, text="Delay (ms)", bg=CARD, fg=MUTED,
+        self.auto_tawar_delay_box = tk.Frame(toggle_row, bg=CARD)
+
+        tk.Label(self.auto_tawar_delay_box, text="Delay (ms)", bg=CARD, fg=MUTED,
                  font=(FONT, 8)).pack(side="left", padx=(14, 4))
 
         self.e_auto_tawar_delay_min = tk.Entry(
-            toggle_row, bg=FIELD, fg=TEXT, relief="flat", width=5,
+            self.auto_tawar_delay_box, bg=FIELD, fg=TEXT, relief="flat", width=5,
             font=(FONT, 10), insertbackground=ACCENT,
         )
         self.e_auto_tawar_delay_min.insert(0, str(int(self.auto_tawar_delay_min_ms)))
         self.e_auto_tawar_delay_min.pack(side="left", ipady=3)
 
-        tk.Label(toggle_row, text="-", bg=CARD, fg=MUTED,
+        tk.Label(self.auto_tawar_delay_box, text="-", bg=CARD, fg=MUTED,
                  font=(FONT, 9)).pack(side="left", padx=3)
 
         self.e_auto_tawar_delay_max = tk.Entry(
-            toggle_row, bg=FIELD, fg=TEXT, relief="flat", width=5,
+            self.auto_tawar_delay_box, bg=FIELD, fg=TEXT, relief="flat", width=5,
             font=(FONT, 10), insertbackground=ACCENT,
         )
         self.e_auto_tawar_delay_max.insert(0, str(int(self.auto_tawar_delay_max_ms)))
         self.e_auto_tawar_delay_max.pack(side="left", ipady=3)
 
-        RoundedButton(toggle_row, "Simpan", self.save_auto_tawar_form,
-                     width=90, height=30, fill=ACCENT, bg=CARD).pack(
-            side="left", padx=(14, 0))
+        self.auto_tawar_delay_box.pack(side="left")
 
-        jenis_row = tk.Frame(panel, bg=CARD)
+        self.auto_tawar_simpan_btn = RoundedButton(
+            toggle_row, "Simpan", self.save_auto_tawar_form,
+            width=90, height=30, fill=ACCENT, bg=CARD)
+        self.auto_tawar_simpan_btn.pack(side="left", padx=(14, 0))
+
+        self.auto_tawar_jenis_row = tk.Frame(panel, bg=CARD)
+        jenis_row = self.auto_tawar_jenis_row
         jenis_row.grid(row=2, column=0, sticky="w", pady=(10, 0))
 
         tk.Label(jenis_row, text="Jenis:", bg=CARD, fg=MUTED,
@@ -1316,9 +1343,17 @@ class App(tk.Tk):
         self._refresh_auto_tawar_visibility()
 
     def _refresh_auto_tawar_visibility(self):
+        """Semua panel syarat, baris "Jenis:", dan field Delay tersembunyi
+        kalau Auto Tawar dimatikan — sama seperti Auto Terima."""
         if not self.auto_tawar_enabled_var.get():
+            self.auto_tawar_delay_box.pack_forget()
+            self.auto_tawar_jenis_row.grid_remove()
             self.auto_tawar_fields_frame.grid_remove()
             return
+        if not self.auto_tawar_delay_box.winfo_ismapped():
+            self.auto_tawar_delay_box.pack(
+                side="left", before=self.auto_tawar_simpan_btn)
+        self.auto_tawar_jenis_row.grid()
         self.auto_tawar_fields_frame.grid()
 
         for jenis, sub in self.auto_tawar_jenis_panels.items():
@@ -1497,11 +1532,15 @@ class App(tk.Tk):
                  "sys")
 
     def _watch_job_status(self, job):
-        """Pantau status order yang baru diterima sampai berubah dari
-        status awalnya (mis. dari "Menunggu Pembayaran" jadi status
-        lain) lalu catat sekali dan berhenti memantau job ini. Dibatasi
-        3 jam supaya thread tidak hidup selamanya kalau client tidak
-        kunjung bayar/status tidak pernah berubah."""
+        """Pantau status order yang baru diterima sampai benar-benar masuk
+        proses (bukan sekadar "waiting-payment", karena order memang
+        lazim berstatus waiting-payment dulu sebelum client bayar).
+        Baru dicatat sekali kalau status berubah jadi sesuatu SELAIN
+        status awal & SELAIN waiting-payment. Kalau status waiting-payment
+        itu kedaluwarsa jadi "expired", berhenti memantau job ini tanpa
+        dicatat (client tidak jadi bayar). Dibatasi 3 jam supaya thread
+        tidak hidup selamanya kalau client tidak kunjung bayar/status
+        tidak pernah berubah."""
         job_id, collection, url = job.get("id"), job.get("collection"), job.get("url")
         if not (job_id and collection):
             return
@@ -1514,6 +1553,9 @@ class App(tk.Tk):
                 return
             status_awal = info0.get("status")
 
+        def _norm(s):
+            return (s or "").strip().lower().replace("_", "-")
+
         deadline = time.time() + 3 * 3600
         while time.time() < deadline:
             time.sleep(45)
@@ -1522,7 +1564,18 @@ class App(tk.Tk):
             if hard_error:
                 continue
             status_baru = info.get("status")
-            if status_baru and status_baru != "-" and status_baru != status_awal:
+            norm_baru = _norm(status_baru)
+            if not status_baru or norm_baru == "-":
+                continue
+            if "expired" in norm_baru:
+                # Client tidak jadi bayar — berhenti memantau, tidak dicatat.
+                return
+            if norm_baru == "waiting-payment":
+                # Masih menunggu client bayar — belum masuk proses, lanjut pantau.
+                continue
+            if norm_baru != _norm(status_awal):
+                # Berubah jadi status lain (bukan waiting-payment/expired) —
+                # ini yang dianggap "masuk proses".
                 self.ui(self._add_job_note, job, status_baru)
                 return
 
@@ -1633,6 +1686,10 @@ class App(tk.Tk):
             "enabled": legacy_enabled and legacy_jenis == "Parafrase",
             "min_target": data.get("auto_min_target", 20),
             "min_client_pct": data.get("auto_min_client_pct", 50),
+            # Syarat harga ABSOLUT (Rp), terpisah dari perbandingan % di
+            # atas — mis. client minimal Rp100.000 berapa pun % nya
+            # terhadap estimasi. Kosongkan (None) untuk tidak dipakai.
+            "min_client_price": data.get("auto_min_client_price", 100000),
             "deadline_min_h": data.get("auto_deadline_min_h", 2),
             "deadline_max_h": data.get("auto_deadline_max_h", 48),
         }
@@ -1640,6 +1697,7 @@ class App(tk.Tk):
             "enabled": legacy_enabled and legacy_jenis == "Humanizer",
             "min_target": data.get("auto_min_target", 20),
             "min_client_pct": data.get("auto_min_client_pct", 50),
+            "min_client_price": data.get("auto_min_client_price", 100000),
             "deadline_min_h": data.get("auto_deadline_min_h", 2),
             "deadline_max_h": data.get("auto_deadline_max_h", 48),
             "max_word_count": data.get("auto_max_word_count", 3000),
@@ -1647,6 +1705,7 @@ class App(tk.Tk):
         fixfile_defaults = {
             "enabled": False,
             "min_client_pct": 50,
+            "min_client_price": 100000,
             "deadline_min_h": 2,
             "deadline_max_h": 48,
             "service_include": [],
@@ -2270,9 +2329,18 @@ class App(tk.Tk):
         if estimasi <= 0:
             return False
 
-        # Syarat 1 (semua jenis): perbandingan harga client vs estimasi.
+        # Syarat 1 (semua jenis): perbandingan harga client vs estimasi (%).
+        # Pakai "<" (bukan "<=") supaya job yang persentasenya PAS SAMA
+        # dengan nilai minimal tetap lolos, bukan malah ditolak.
         min_client_pct = settings.get("min_client_pct")
-        if min_client_pct not in (None, "") and (client / estimasi) * 100 <= float(min_client_pct):
+        if min_client_pct not in (None, "") and (client / estimasi) * 100 < float(min_client_pct):
+            return False
+
+        # Syarat 1b (semua jenis): harga client ABSOLUT minimal (Rp),
+        # terpisah dari perbandingan % di atas — mis. client minimal
+        # Rp100.000 berapa pun persentasenya terhadap estimasi.
+        min_client_price = settings.get("min_client_price")
+        if min_client_price not in (None, "") and client < float(min_client_price):
             return False
 
         # Syarat 2 (semua jenis): rentang deadline.
@@ -2292,7 +2360,7 @@ class App(tk.Tk):
             except (TypeError, ValueError):
                 return False
             min_target = settings.get("min_target")
-            if min_target not in (None, "") and target <= float(min_target):
+            if min_target not in (None, "") and target < float(min_target):
                 return False
 
             if jenis == "Humanizer":
