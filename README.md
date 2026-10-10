@@ -24,5 +24,19 @@ py -m PyInstaller --onefile --windowed --name BOT_by_Zierra ^
 ## Rilis versi baru
 
 1. Naikkan `APP_VERSION` di `listener_gui.py`
-2. Update `version` dan `url` di `version.json` (link ke rilis/exe baru)
-3. Commit & push — semua pengguna lama otomatis dapat notif update
+2. Build ulang `.exe` (lihat langkah Build di atas), lalu buat GitHub
+   Release baru di repo ini dan upload `BOT_by_Zierra.exe` sebagai asset
+   rilis itu
+3. Update `version.json`:
+   - `version` — samakan dengan `APP_VERSION`
+   - `url` — link halaman rilis (fallback: dibuka di browser kalau
+     update otomatis tidak bisa jalan)
+   - `exe_url` — link **download langsung** ke asset `.exe` rilis itu
+     (klik kanan nama file di halaman Release -> "Copy link address").
+     Kalau diisi, pengguna yang sudah pakai `.exe` hasil build (bukan
+     menjalankan dari source) akan ditawari **update otomatis**: bot
+     mengunduh `.exe` baru, menutup diri sebentar, menimpa `.exe` lama,
+     lalu membuka ulang sendiri — tidak perlu download manual lagi.
+     Kalau dikosongkan, fallback ke cara lama (buka `url` di browser).
+4. Commit & push — semua pengguna lama otomatis dapat notif update saat
+   bot dibuka

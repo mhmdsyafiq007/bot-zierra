@@ -38,7 +38,7 @@ try:
 except ImportError:
     keyboard = None
 
-from browser_actions import BrowserActions
+from browser_actions import BrowserActions, compute_tawar_price_from_client
 
 
 # ---------------------------------------------------------------- paths
@@ -105,7 +105,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -1152,6 +1152,51 @@ class App(tk.Tk):
         self.log(f"[SYS] Syarat Auto Terima disimpan ({status}, jenis aktif: "
                  f"{', '.join(aktif) if aktif else '-'}).", "sys")
 
+    def _build_target_tawar_row(self, sub, jenis, settings, row):
+        """Baris checkbox "Target Tawar (%)" per jenis di panel Auto
+        Tawar. Kalau DICENTANG, kolom persentase muncul dan harga yang
+        ditawar dihitung sebagai persentase dari Harga Client (lihat
+        compute_tawar_price_from_client di browser_actions.py). Kalau
+        TIDAK dicentang, kolom disembunyikan dan logika lama tetap
+        dipakai: harga dihitung dari potongan bracket Harga Estimasi
+        (compute_tawar_price)."""
+        row_frame = tk.Frame(sub, bg=CARD)
+        row_frame.grid(row=row, column=0, columnspan=6, sticky="w",
+                        padx=8, pady=(10, 0))
+
+        var = tk.BooleanVar(value=bool(settings.get("use_target_tawar")))
+        self.auto_tawar_use_pct_vars[jenis] = var
+        tk.Checkbutton(
+            row_frame, text="Target Tawar (%) dari Harga Client",
+            variable=var,
+            command=lambda j=jenis: self._refresh_target_tawar_field(j),
+            bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
+            activeforeground=TEXT, font=(FONT, 8), anchor="w",
+        ).pack(side="left")
+
+        wrap = tk.Frame(row_frame, bg=CARD)
+        pct_value = settings.get("target_tawar_pct")
+        entry = tk.Entry(wrap, bg=FIELD, fg=TEXT, relief="flat", width=6,
+                         font=(FONT, 10), insertbackground=ACCENT)
+        entry.insert(0, "" if pct_value is None else str(pct_value))
+        entry.pack(side="left", ipady=3)
+        tk.Label(wrap, text="%", bg=CARD, fg=MUTED, font=(FONT, 8)).pack(
+            side="left", padx=(3, 0))
+        self.auto_tawar_pct_entries[jenis] = entry
+        self.auto_tawar_pct_wraps[jenis] = wrap
+        if var.get():
+            wrap.pack(side="left", padx=(10, 0))
+
+    def _refresh_target_tawar_field(self, jenis):
+        wrap = self.auto_tawar_pct_wraps.get(jenis)
+        if wrap is None:
+            return
+        if self.auto_tawar_use_pct_vars[jenis].get():
+            if not wrap.winfo_ismapped():
+                wrap.pack(side="left", padx=(10, 0))
+        else:
+            wrap.pack_forget()
+
     # ------------------------------------------------------ Auto Tawar
     # Fitur TERPISAH dari Auto Terima di atas — panel, syarat per jenis,
     # dan delay-nya sendiri-sendiri, supaya bisa diisi beda (mis. Auto
@@ -1235,6 +1280,9 @@ class App(tk.Tk):
         self.auto_tawar_jenis_panels = {}
         self.auto_tawar_fixfile_include_vars = {}
         self.auto_tawar_fixfile_exclude_vars = {}
+        self.auto_tawar_use_pct_vars = {}
+        self.auto_tawar_pct_entries = {}
+        self.auto_tawar_pct_wraps = {}
 
         row_i = 0
         for jenis in self.JENIS_LIST:
@@ -1279,6 +1327,8 @@ class App(tk.Tk):
                     entry.pack(anchor="w", ipady=3, pady=(2, 0))
                     self.auto_tawar_entries[jenis][key] = entry
 
+                self._build_target_tawar_row(sub, jenis, settings, row=2)
+
             else:  # Fix File
                 field_defs = [
                     ("max_client_pct", "Client max (%)", settings.get("max_client_pct")),
@@ -1296,8 +1346,10 @@ class App(tk.Tk):
                     entry.pack(anchor="w", ipady=3, pady=(2, 0))
                     self.auto_tawar_entries[jenis][key] = entry
 
+                self._build_target_tawar_row(sub, jenis, settings, row=2)
+
                 service_row = tk.Frame(sub, bg=CARD)
-                service_row.grid(row=2, column=0, columnspan=6, sticky="ew",
+                service_row.grid(row=3, column=0, columnspan=6, sticky="ew",
                                  padx=8, pady=(10, 0))
                 service_row.grid_columnconfigure(0, weight=1, uniform="svct")
                 service_row.grid_columnconfigure(1, weight=1, uniform="svct")
@@ -1380,6 +1432,11 @@ class App(tk.Tk):
             for jenis in self.JENIS_LIST:
                 entries = self.auto_tawar_entries[jenis]
                 enabled = bool(self.auto_tawar_jenis_vars[jenis].get())
+                use_target_tawar = bool(self.auto_tawar_use_pct_vars[jenis].get())
+                target_tawar_pct = read(self.auto_tawar_pct_entries[jenis],
+                                        allow_blank=True)
+                if use_target_tawar and target_tawar_pct is None:
+                    raise ValueError("Target Tawar (%) dicentang tapi kosong")
 
                 if jenis in ("Parafrase", "Humanizer"):
                     s = {
@@ -1389,6 +1446,8 @@ class App(tk.Tk):
                         "max_client_pct": read(entries["max_client_pct"]),
                         "deadline_min_h": read(entries["deadline_min_h"]),
                         "deadline_max_h": read(entries["deadline_max_h"]),
+                        "use_target_tawar": use_target_tawar,
+                        "target_tawar_pct": target_tawar_pct,
                     }
                     if jenis == "Humanizer":
                         s["max_word_count"] = read(entries["max_word_count"],
@@ -1399,6 +1458,8 @@ class App(tk.Tk):
                         "max_client_pct": read(entries["max_client_pct"]),
                         "deadline_min_h": read(entries["deadline_min_h"]),
                         "deadline_max_h": read(entries["deadline_max_h"]),
+                        "use_target_tawar": use_target_tawar,
+                        "target_tawar_pct": target_tawar_pct,
                         "service_include": [
                             svc for svc in self.FIXFILE_SERVICES
                             if self.auto_tawar_fixfile_include_vars[svc].get()
@@ -1764,19 +1825,26 @@ class App(tk.Tk):
         # tertentu dari estimasi — ini memang fallback untuk job yang
         # harganya kurang bagus buat Terima langsung tapi masih worth
         # ditawar (lihat _evaluate_auto_tawar_conditions).
+        # use_target_tawar/target_tawar_pct: kalau dicentang, harga yang
+        # ditawar dihitung sebagai persentase dari Harga Client (lihat
+        # compute_tawar_price_from_client) bukan potongan bracket dari
+        # Harga Estimasi — diatur per jenis lewat checkbox di panel.
         parafrase_defaults = {
             "enabled": False, "target_min": 0, "target_max": 20,
             "max_client_pct": 70, "deadline_min_h": 2, "deadline_max_h": 48,
+            "use_target_tawar": False, "target_tawar_pct": None,
         }
         humanizer_defaults = {
             "enabled": False, "target_min": 0, "target_max": 20,
             "max_client_pct": 70, "deadline_min_h": 2, "deadline_max_h": 48,
             "max_word_count": 3000,
+            "use_target_tawar": False, "target_tawar_pct": None,
         }
         fixfile_defaults = {
             "enabled": False, "max_client_pct": 70,
             "deadline_min_h": 2, "deadline_max_h": 48,
             "service_include": [], "service_exclude": [],
+            "use_target_tawar": False, "target_tawar_pct": None,
         }
 
         return {
@@ -2074,29 +2142,106 @@ class App(tk.Tk):
                 return
             if self._version_tuple(remote_version) > self._version_tuple(APP_VERSION):
                 url = data.get("url") or ""
+                exe_url = data.get("exe_url") or ""
                 notes = data.get("notes") or ""
                 msg = (f"[UPDATE] Versi baru tersedia: {remote_version} "
                        f"(sekarang: {APP_VERSION}).")
                 if notes:
                     msg += f" Catatan: {notes}"
                 self.ui(self.log, msg, "sys")
-                if url:
-                    self.ui(self._show_update_notice, remote_version, url)
+                if url or exe_url:
+                    self.ui(self._show_update_notice, remote_version, url, exe_url)
         except Exception as exc:                  # noqa: BLE001
             # Gagal cek update tidak boleh mengganggu jalannya bot —
             # cukup diam, bukan dianggap error penting.
             self.ui(self.log, f"[UPDATE] Gagal cek versi terbaru: {exc}", "skip")
 
-    def _show_update_notice(self, version, url):
-        if messagebox.askyesno(
-            "Update tersedia",
-            f"Versi {version} sudah tersedia (sekarang {APP_VERSION}).\n\n"
-            "Buka halaman unduhannya sekarang?",
-        ):
+    def _show_update_notice(self, version, url, exe_url=""):
+        """Kalau version.json punya "exe_url" (link langsung ke file .exe,
+        bukan halaman rilis) DAN aplikasi ini sedang jalan sebagai .exe
+        hasil build (bukan dijalankan lewat `py listener_gui.py`), tawarkan
+        update otomatis: download .exe baru lalu restart sendiri. Kalau
+        tidak memenuhi itu (dijalankan dari source, atau version.json cuma
+        punya "url" halaman rilis), fallback ke cara lama: buka link di
+        browser untuk diunduh manual."""
+        can_auto = bool(exe_url) and bool(getattr(sys, "frozen", False))
+        if can_auto:
+            tanya = (f"Versi {version} sudah tersedia (sekarang {APP_VERSION}).\n\n"
+                      "Unduh & update otomatis sekarang? Aplikasi akan "
+                      "tertutup sebentar lalu terbuka ulang sendiri.")
+        else:
+            tanya = (f"Versi {version} sudah tersedia (sekarang {APP_VERSION}).\n\n"
+                      "Buka halaman unduhannya sekarang?")
+        if not messagebox.askyesno("Update tersedia", tanya):
+            return
+        if can_auto:
+            threading.Thread(target=self._download_and_apply_update,
+                             args=(exe_url, version), daemon=True).start()
+            return
+        target = url or exe_url
+        try:
+            webbrowser.open(target)
+        except Exception as exc:              # noqa: BLE001
+            self.log(f"[UPDATE] Gagal membuka link: {exc}", "err")
+
+    def _download_and_apply_update(self, exe_url, version):
+        """Unduh .exe versi baru di sebelah .exe yang sedang jalan, lalu
+        jadwalkan penggantiannya lewat skrip .bat kecil (exe yang sedang
+        jalan tidak bisa menimpa dirinya sendiri selagi masih berjalan).
+        Urutannya: unduh -> tulis update.bat -> jalankan .bat (nunggu
+        proses ini keluar dulu baru menimpa & membuka ulang) -> tutup
+        aplikasi ini sendiri supaya file-nya tidak terkunci lagi."""
+        import urllib.request
+        current_exe = os.path.abspath(sys.executable)
+        folder = os.path.dirname(current_exe)
+        new_exe = os.path.join(folder, "_update_baru.exe")
+        bat_path = os.path.join(folder, "_update.bat")
+
+        try:
+            self.ui(self.log, f"[UPDATE] Mengunduh versi {version}...", "sys")
+            urllib.request.urlretrieve(exe_url, new_exe)
+            if not os.path.exists(new_exe) or os.path.getsize(new_exe) == 0:
+                raise RuntimeError("file hasil unduhan kosong")
+        except Exception as exc:              # noqa: BLE001
+            self.ui(self.log, f"[UPDATE] Gagal mengunduh update: {exc}", "err")
             try:
-                webbrowser.open(url)
-            except Exception as exc:              # noqa: BLE001
-                self.log(f"[UPDATE] Gagal membuka link: {exc}", "err")
+                if os.path.exists(new_exe):
+                    os.remove(new_exe)
+            except OSError:
+                pass
+            return
+
+        try:
+            bat_content = (
+                "@echo off\r\n"
+                "timeout /t 2 /nobreak >nul\r\n"
+                f'move /y "{new_exe}" "{current_exe}"\r\n'
+                f'start "" "{current_exe}"\r\n'
+                'del "%~f0"\r\n'
+            )
+            with open(bat_path, "w", encoding="utf-8") as f:
+                f.write(bat_content)
+
+            import subprocess
+            subprocess.Popen(
+                ["cmd", "/c", bat_path],
+                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                close_fds=True,
+            )
+            self.ui(self.log, "[UPDATE] Update diunduh — aplikasi akan "
+                              "tertutup & terbuka ulang otomatis...", "sys")
+            self.after(500, self._quit_for_update)
+        except Exception as exc:              # noqa: BLE001
+            self.ui(self.log, f"[UPDATE] Gagal menjadwalkan update: {exc}", "err")
+
+    def _quit_for_update(self):
+        """Keluar sebersih mungkin supaya exe lama tidak terkunci, lalu
+        biarkan _update.bat (sudah berjalan di proses terpisah) menimpa
+        file-nya dan membuka ulang aplikasi."""
+        try:
+            self.destroy()
+        finally:
+            os._exit(0)
 
     def _warm_browser(self):
         """Resolve controller browser default lebih awal, supaya saat link
@@ -2157,9 +2302,26 @@ class App(tk.Tk):
         # ulang dari halaman.
         self._close_popup()
         job = self.current_job
+
+        # Kalau jenis job ini punya "Target Tawar (%)" aktif (dicentang di
+        # panel Auto Tawar), harga ditawar dihitung dari % Harga Client —
+        # bukan potongan bracket Harga Estimasi seperti biasa. Berlaku
+        # juga untuk Tawar manual (F3/tombol popup), bukan cuma Auto Tawar.
+        harga_tawar = None
+        jenis_settings = self.auto_tawar_jenis_settings.get(job.get("jenis"), {})
+        if jenis_settings.get("use_target_tawar"):
+            pct = jenis_settings.get("target_tawar_pct")
+            client_raw = job.get("harga_client_raw")
+            if pct not in (None, "") and client_raw not in (None, ""):
+                try:
+                    harga_tawar = compute_tawar_price_from_client(client_raw, pct)
+                except (TypeError, ValueError):
+                    harga_tawar = None
+
         threading.Thread(
             target=self._run_and_alert,
-            args=(self.browser.do_tawar, (job.get("url"), job.get("harga_estimasi_raw"))),
+            args=(self.browser.do_tawar,
+                  (job.get("url"), job.get("harga_estimasi_raw"), harga_tawar)),
             daemon=True,
         ).start()
 

@@ -1,5 +1,6 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
-  "notes": "Catatan Job Proses kini cuma mencatat job yang benar-benar masuk proses (bukan sekadar waiting-payment), dan berhenti memantau kalau order expired. Panel Auto Terima/Auto Tawar sekarang full tersembunyi (termasuk baris Jenis & Delay) saat Aktifkan dimatikan. Tambah syarat Auto Terima: Client min (Rp) — harga client minimal absolut, terpisah dari perbandingan %. Perbaikan boundary: target/persentase yang PAS SAMA dengan nilai minimal kini lolos (sebelumnya malah ditolak)."
+  "exe_url": "",
+  "notes": "Auto Tawar: checkbox baru \"Target Tawar (%) dari Harga Client\" per jenis — kalau dicentang, harga tawar dihitung dari persentase Harga Client (bukan potongan Harga Estimasi), kolom persennya baru muncul kalau dicentang. Auto-updater sekarang bisa update otomatis (unduh .exe baru & buka ulang sendiri) kalau version.json diisi exe_url — lihat README."
 }
