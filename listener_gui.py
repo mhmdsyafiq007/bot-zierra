@@ -66,6 +66,11 @@ SOUND_FILE = resource_path("notif.wav")
 
 TARGET_CHAT = "KAWALU - Parafrase Notif"
 LABEL = "*MASUK*"
+# Dipakai fitur Catatan Job Proses — pesan *PAID*/*DONE* di grup yang
+# sama, dicocokkan ke job kita lewat Ref (lihat _handle_status_broadcast).
+# Kalau format label di grup ternyata beda, cukup sesuaikan dua baris ini.
+LABEL_PAID = "*PAID*"
+LABEL_DONE = "*DONE*"
 URL_PATTERN = re.compile(r"https?://\S+")
 REF_PATTERN = re.compile(r"Ref:\s*(\S+)")
 ID_PATTERN = re.compile(r"/([a-f0-9]{24})(?:[/?]|$)")
@@ -105,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -345,6 +350,13 @@ class App(tk.Tk):
         self.job_notes_list = self.load_job_notes()
         self.notes_popup = None
         self.notes_popup_position = self.load_notes_popup_position()
+
+        # Job yang baru diterima & masih dipantau (ref -> job snapshot).
+        # Dipakai _watch_job_status (polling tiap 45 detik, fallback) dan
+        # juga dicek tiap pesan *PAID*/*DONE* masuk di grup Telegram —
+        # supaya status bisa terdeteksi lebih cepat tanpa nunggu polling.
+        # Runtime-only, tidak disimpan ke config.json.
+        self.watched_jobs = {}
 
         self.sound_volume = self.load_sound_volume()
         self._volume_save_job = None
@@ -1578,8 +1590,12 @@ class App(tk.Tk):
 
     def _add_job_note(self, job, status_baru):
         from datetime import datetime as _dt
+        ref = job.get("ref") or "-"
+        # Sudah masuk proses (dicatat) — berhenti dipantau, baik lewat
+        # polling (_watch_job_status) maupun lewat notif *PAID* grup.
+        self.watched_jobs.pop(ref, None)
         entry = {
-            "ref": job.get("ref") or "-",
+            "ref": ref,
             "jenis": job.get("jenis") or "-",
             "harga_client": job.get("harga_client") or "-",
             "status": status_baru,
@@ -1592,6 +1608,46 @@ class App(tk.Tk):
         self.log(f"[CATATAN] {entry['jenis']} ({entry['ref']}) -> {status_baru}",
                  "sys")
 
+    def _mark_job_note_done(self, ref):
+        """Dipanggil saat pesan *DONE* grup cocok dengan ref job kita yang
+        ada di Catatan Job Proses — status entry-nya diganti "done" (bukan
+        dihapus, supaya masih kelihatan sempat tercatat hari itu; user
+        tetap bisa hapus manual lewat tombol Hapus kalau mau)."""
+        changed = False
+        for entry in self.job_notes_list:
+            if entry.get("ref") == ref:
+                entry["status"] = "done"
+                changed = True
+        if not changed:
+            return
+        self.save_job_notes()
+        self._refresh_notes_badge()
+        self.show_notes_popup()
+        self.log(f"[CATATAN] {ref} -> done (lewat notif *DONE* grup)", "sys")
+
+    def _handle_status_broadcast(self, text, is_paid):
+        """Dipanggil tiap pesan berlabel *PAID*/*DONE* masuk di grup yang
+        sama dengan *MASUK* — dicocokkan ke job yang SUDAH KITA TERIMA
+        lewat Ref (job orang lain otomatis diabaikan karena ref-nya tidak
+        ada di self.watched_jobs). Ini pelengkap _watch_job_status
+        (polling tiap 45 detik): kalau status susah/lama ke-refresh di
+        server, notif grup ini biasanya lebih cepat kasih tahu."""
+        ref_match = REF_PATTERN.search(text)
+        ref = ref_match.group(1) if ref_match else None
+        if not ref:
+            return
+        if is_paid:
+            job = self.watched_jobs.get(ref)
+            if not job:
+                return  # bukan job kita — abaikan
+            self._add_job_note(job, "paid")
+        else:
+            # *DONE* bisa datang kapan saja — kalau job ini masih di
+            # watched_jobs (polling belum sempat mendeteksi "proses"
+            # duluan), hentikan juga pemantauannya.
+            self.watched_jobs.pop(ref, None)
+            self._mark_job_note_done(ref)
+
     def _watch_job_status(self, job):
         """Pantau status order yang baru diterima sampai benar-benar masuk
         proses (bukan sekadar "waiting-payment", karena order memang
@@ -1601,8 +1657,16 @@ class App(tk.Tk):
         itu kedaluwarsa jadi "expired", berhenti memantau job ini tanpa
         dicatat (client tidak jadi bayar). Dibatasi 3 jam supaya thread
         tidak hidup selamanya kalau client tidak kunjung bayar/status
-        tidak pernah berubah."""
+        tidak pernah berubah.
+
+        Jalan PARALEL dengan _handle_status_broadcast (notif *PAID*/*DONE*
+        grup) — dua-duanya sama-sama bisa memicu catatan; siapa pun yang
+        lebih dulu "menang" (job langsung dicoret dari self.watched_jobs
+        lewat _add_job_note, jadi yang kedua tidak dobel mencatat)."""
+        ref = job.get("ref")
         job_id, collection, url = job.get("id"), job.get("collection"), job.get("url")
+        if ref:
+            self.watched_jobs[ref] = job
         if not (job_id and collection):
             return
 
@@ -1620,6 +1684,10 @@ class App(tk.Tk):
         deadline = time.time() + 3 * 3600
         while time.time() < deadline:
             time.sleep(45)
+            # Sudah ditangani lewat notif *PAID*/*DONE* grup selagi tidur —
+            # tidak perlu polling lagi untuk job ini.
+            if ref and ref not in self.watched_jobs:
+                return
             info, _, hard_error = self.browser.fetch_order_detail(
                 job_id, collection, url)
             if hard_error:
@@ -1630,6 +1698,8 @@ class App(tk.Tk):
                 continue
             if "expired" in norm_baru:
                 # Client tidak jadi bayar — berhenti memantau, tidak dicatat.
+                if ref:
+                    self.watched_jobs.pop(ref, None)
                 return
             if norm_baru == "waiting-payment":
                 # Masih menunggu client bayar — belum masuk proses, lanjut pantau.
@@ -2365,6 +2435,17 @@ class App(tk.Tk):
                 return
 
             text = event.raw_text
+
+            # Pesan *PAID*/*DONE* dicocokkan ke job yang sudah KITA terima
+            # (lewat Ref) untuk fitur Catatan Job Proses — lebih cepat dari
+            # polling 45 detik, dan tidak tersangkut kalau statusnya lama
+            # berubah di server. Job orang lain (ref tidak kita kenal)
+            # diabaikan. Dicek lebih dulu karena dua label ini tidak akan
+            # pernah muncul bareng *MASUK*.
+            if LABEL_PAID in text or LABEL_DONE in text:
+                self.ui(self._handle_status_broadcast, text, LABEL_PAID in text)
+                return
+
             if LABEL not in text:
                 return
 

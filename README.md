@@ -7,10 +7,16 @@ ringkasan job, dan Terima/Tawar otomatis lewat Chrome Debug Mode.
 
 - `listener_gui.py` — aplikasi utama (Tkinter)
 - `browser_actions.py` — otomasi Chrome (Selenium)
+- `notif.wav` — suara notifikasi, ikut di-bundle ke dalam `.exe`
 - `version.json` — dibaca otomatis oleh fitur auto-updater di dalam bot
   (`UPDATE_CHECK_URL`), jangan diubah formatnya
+- `.github/workflows/build.yml` — build & rilis `.exe` OTOMATIS (lihat
+  bagian "Rilis versi baru" di bawah)
 
-## Build ke .exe
+## Build ke .exe (manual/lokal, opsional)
+
+Build sekarang sudah otomatis lewat GitHub Actions (lihat di bawah) —
+bagian ini cuma perlu kalau mau coba build sendiri di komputer lokal:
 
 ```
 rmdir /s /q build
@@ -21,22 +27,37 @@ py -m PyInstaller --onefile --windowed --name BOT_by_Zierra ^
    listener_gui.py
 ```
 
-## Rilis versi baru
+## Rilis versi baru (OTOMATIS)
 
-1. Naikkan `APP_VERSION` di `listener_gui.py`
-2. Build ulang `.exe` (lihat langkah Build di atas), lalu buat GitHub
-   Release baru di repo ini dan upload `BOT_by_Zierra.exe` sebagai asset
-   rilis itu
-3. Update `version.json`:
-   - `version` — samakan dengan `APP_VERSION`
-   - `url` — link halaman rilis (fallback: dibuka di browser kalau
-     update otomatis tidak bisa jalan)
-   - `exe_url` — link **download langsung** ke asset `.exe` rilis itu
-     (klik kanan nama file di halaman Release -> "Copy link address").
-     Kalau diisi, pengguna yang sudah pakai `.exe` hasil build (bukan
-     menjalankan dari source) akan ditawari **update otomatis**: bot
-     mengunduh `.exe` baru, menutup diri sebentar, menimpa `.exe` lama,
-     lalu membuka ulang sendiri — tidak perlu download manual lagi.
-     Kalau dikosongkan, fallback ke cara lama (buka `url` di browser).
-4. Commit & push — semua pengguna lama otomatis dapat notif update saat
-   bot dibuka
+Build & upload `.exe` sudah otomatis lewat GitHub Actions
+(`.github/workflows/build.yml`). Setiap push ke `main` yang mengubah
+`listener_gui.py`/`browser_actions.py`/`notif.wav`/`version.json`:
+
+1. GitHub menjalankan build di komputer Windows sementara (gratis untuk
+   repo public), persis seperti command manual di atas.
+2. Hasil `.exe`-nya di-upload ke satu GitHub Release tetap bernama
+   **"latest"** — asset lama di release itu ditimpa tiap build baru.
+3. Karena nama release-nya selalu sama, link download-nya juga selalu
+   sama:
+   `https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe`
+   — ini sudah terpasang permanen sebagai `exe_url` di `version.json`,
+   **tidak perlu diubah-ubah lagi tiap rilis**.
+
+Jadi langkah rilis versi baru tinggal:
+
+1. Naikkan `APP_VERSION` di `listener_gui.py` DAN `version` di
+   `version.json` (harus sama)
+2. (opsional) update `notes` di `version.json` — catatan rilis yang
+   ditampilkan ke pengguna
+3. Commit & push ke `main`
+
+Otomatis setelahnya: GitHub Actions build `.exe` baru -> upload ke
+Release "latest" -> bot pengguna lama mendeteksi versi baru saat dibuka
+-> ditawari update otomatis (unduh `.exe` baru, tutup sebentar, timpa
+yang lama, buka ulang sendiri). Progress build bisa dipantau di tab
+**Actions** repo ini.
+
+`exe_url` cuma dipakai kalau bot sedang jalan sebagai `.exe` hasil
+build (bukan dari source). Kalau suatu saat build otomatis gagal/mau
+dimatikan, cukup kosongkan `exe_url` — updater otomatis fallback ke
+cara lama (buka `url` di browser untuk diunduh manual).

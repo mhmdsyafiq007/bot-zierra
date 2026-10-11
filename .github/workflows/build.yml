@@ -1,0 +1,64 @@
+name: Build & publish exe
+
+# Jalan otomatis tiap kode/asset/version berubah di main, atau manual lewat
+# tab Actions -> "Build & publish exe" -> "Run workflow". Hasilnya selalu
+# ditaruh di satu GitHub Release tetap bernama "latest" (asset lama ditimpa),
+# jadi link download-nya (exe_url di version.json) tidak pernah berubah dan
+# cukup diisi sekali.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "listener_gui.py"
+      - "browser_actions.py"
+      - "notif.wav"
+      - "version.json"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller telethon selenium keyboard
+
+      - name: Baca versi dari version.json
+        id: ver
+        shell: bash
+        run: |
+          VERSION=$(python -c "import json; print(json.load(open('version.json'))['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build exe (PyInstaller)
+        run: |
+          python -m PyInstaller --onefile --windowed --name BOT_by_Zierra `
+            --add-data "notif.wav;." --collect-all selenium --hidden-import keyboard `
+            listener_gui.py
+
+      - name: Publish/update GitHub Release "latest"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Build terbaru (otomatis) — v${{ steps.ver.outputs.version }}"
+          body: |
+            Hasil build otomatis dari commit ${{ github.sha }} (versi
+            ${{ steps.ver.outputs.version }} di version.json). Asset
+            `BOT_by_Zierra.exe` di release ini selalu yang terbaru —
+            link download-nya tetap sama tiap rilis, dipakai sebagai
+            `exe_url` di `version.json` untuk fitur auto-update bot.
+          files: dist/BOT_by_Zierra.exe
+          fail_on_unmatched_files: true

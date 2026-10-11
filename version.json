@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
-  "exe_url": "",
-  "notes": "Auto Tawar: checkbox baru \"Target Tawar (%) dari Harga Client\" per jenis — kalau dicentang, harga tawar dihitung dari persentase Harga Client (bukan potongan Harga Estimasi), kolom persennya baru muncul kalau dicentang. Auto-updater sekarang bisa update otomatis (unduh .exe baru & buka ulang sendiri) kalau version.json diisi exe_url — lihat README."
+  "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
+  "notes": "Catatan Job Proses sekarang juga dengar pesan *PAID*/*DONE* di grup (dicocokkan ke job kita lewat Ref) supaya status proses terdeteksi lebih cepat, bukan cuma lewat polling tiap 45 detik — pesan PAID/DONE job orang lain otomatis diabaikan. Build & rilis .exe sekarang otomatis lewat GitHub Actions tiap push ke main."
 }
