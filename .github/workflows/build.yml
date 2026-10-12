@@ -49,6 +49,16 @@ jobs:
             --add-data "notif.wav;." --collect-all selenium --hidden-import keyboard `
             listener_gui.py
 
+      - name: Hitung SHA-256 exe
+        # File hash kecil ini dipakai bot (_download_and_apply_update) untuk
+        # memastikan .exe yang diunduh utuh, bukan rusak/kepotong/halaman
+        # error — tanpa ini, download yang gagal di tengah jalan bisa
+        # kepasang menimpa .exe lama yang masih berfungsi.
+        shell: bash
+        run: |
+          sha256sum dist/BOT_by_Zierra.exe | awk '{print $1}' > dist/BOT_by_Zierra.exe.sha256
+          cat dist/BOT_by_Zierra.exe.sha256
+
       - name: Publish/update GitHub Release "latest"
         uses: softprops/action-gh-release@v2
         with:
@@ -60,5 +70,9 @@ jobs:
             `BOT_by_Zierra.exe` di release ini selalu yang terbaru —
             link download-nya tetap sama tiap rilis, dipakai sebagai
             `exe_url` di `version.json` untuk fitur auto-update bot.
-          files: dist/BOT_by_Zierra.exe
+            `BOT_by_Zierra.exe.sha256` dipakai bot untuk verifikasi
+            integritas unduhan sebelum menimpa .exe yang sedang jalan.
+          files: |
+            dist/BOT_by_Zierra.exe
+            dist/BOT_by_Zierra.exe.sha256
           fail_on_unmatched_files: true

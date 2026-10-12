@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
+  "version": "1.4.1",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Tambah syarat \"Kata min\" untuk Humanizer di Auto Terima dan Auto Tawar (dulu cuma ada \"Kata max\") — kosongkan untuk tidak dipakai."
+  "notes": "Perbaikan auto-update: download .exe baru sekarang diverifikasi (SHA-256) sebelum menimpa yang lama, dan exe lama disimpan sebagai .bak dulu — supaya unduhan yang rusak/kepotong (penyebab error \"Failed to load Python DLL\") tidak sampai merusak aplikasi yang sedang jalan."
 }

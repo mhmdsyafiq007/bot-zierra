@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2265,38 +2265,129 @@ class App(tk.Tk):
         except Exception as exc:              # noqa: BLE001
             self.log(f"[UPDATE] Gagal membuka link: {exc}", "err")
 
+    def _fetch_expected_sha256(self, exe_url):
+        """Ambil hash SHA-256 yang seharusnya (file kecil berisi hash saja,
+        di-upload CI di sebelah .exe-nya, nama sama + ".sha256") — dipakai
+        _download_and_apply_update untuk memastikan .exe yang diunduh utuh,
+        bukan file rusak/kepotong (mis. kebetulan ke-download pas asset-nya
+        lagi ditimpa build baru di GitHub). None kalau tidak ada/gagal —
+        rilis lama belum tentu punya file ini, biar tetap bisa update,
+        cuma lewat jalur verifikasi cadangan (sanity check ukuran/isi)."""
+        import urllib.request
+        try:
+            with urllib.request.urlopen(exe_url + ".sha256", timeout=10) as resp:
+                text = resp.read().decode("utf-8", errors="ignore").strip()
+            hash_hex = text.split()[0].lower()
+            if len(hash_hex) == 64 and all(c in "0123456789abcdef" for c in hash_hex):
+                return hash_hex
+        except Exception:                      # noqa: BLE001
+            pass
+        return None
+
     def _download_and_apply_update(self, exe_url, version):
         """Unduh .exe versi baru di sebelah .exe yang sedang jalan, lalu
         jadwalkan penggantiannya lewat skrip .bat kecil (exe yang sedang
         jalan tidak bisa menimpa dirinya sendiri selagi masih berjalan).
-        Urutannya: unduh -> tulis update.bat -> jalankan .bat (nunggu
-        proses ini keluar dulu baru menimpa & membuka ulang) -> tutup
-        aplikasi ini sendiri supaya file-nya tidak terkunci lagi."""
+        Urutannya: unduh (sambil hitung SHA-256) -> cocokkan ke hash yang
+        seharusnya (_fetch_expected_sha256) -> kalau cocok, tulis update.bat
+        -> jalankan .bat (nunggu proses ini keluar dulu baru menimpa &
+        membuka ulang) -> tutup aplikasi ini sendiri supaya file-nya tidak
+        terkunci lagi.
+
+        Verifikasi hash ini penting: download lewat HTTP bisa saja dapat
+        file rusak/kepotong (koneksi putus di tengah) atau bahkan halaman
+        error GitHub (kalau asset-nya pas lagi ditimpa build baru) —
+        TANPA verifikasi, file rusak itu bisa kepasang menimpa .exe yang
+        masih berfungsi, bikin aplikasi tidak bisa dibuka sama sekali
+        ("Failed to load Python DLL" dkk). Kalau verifikasi gagal, .exe
+        yang sedang berjalan TIDAK disentuh — aman, tinggal coba lagi
+        nanti (dicek ulang tiap aplikasi dibuka)."""
+        import hashlib
         import urllib.request
+
         current_exe = os.path.abspath(sys.executable)
         folder = os.path.dirname(current_exe)
         new_exe = os.path.join(folder, "_update_baru.exe")
         bat_path = os.path.join(folder, "_update.bat")
 
-        try:
-            self.ui(self.log, f"[UPDATE] Mengunduh versi {version}...", "sys")
-            urllib.request.urlretrieve(exe_url, new_exe)
-            if not os.path.exists(new_exe) or os.path.getsize(new_exe) == 0:
-                raise RuntimeError("file hasil unduhan kosong")
-        except Exception as exc:              # noqa: BLE001
-            self.ui(self.log, f"[UPDATE] Gagal mengunduh update: {exc}", "err")
+        expected_hash = self._fetch_expected_sha256(exe_url)
+
+        MAX_ATTEMPTS = 2
+        ok = False
+        last_err = None
+        for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
-                if os.path.exists(new_exe):
-                    os.remove(new_exe)
-            except OSError:
-                pass
+                self.ui(self.log,
+                        f"[UPDATE] Mengunduh versi {version} "
+                        f"(percobaan {attempt}/{MAX_ATTEMPTS})...", "sys")
+                hasher = hashlib.sha256()
+                with urllib.request.urlopen(exe_url, timeout=30) as resp:
+                    if getattr(resp, "status", 200) != 200:
+                        raise RuntimeError(f"HTTP {resp.status} dari server")
+                    ctype = (resp.headers.get("Content-Type") or "").lower()
+                    if "text/html" in ctype:
+                        raise RuntimeError("server mengembalikan halaman, "
+                                           "bukan file .exe (link mungkin "
+                                           "lagi diperbarui — coba lagi nanti)")
+                    with open(new_exe, "wb") as f:
+                        while True:
+                            chunk = resp.read(1024 * 256)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            hasher.update(chunk)
+
+                size = os.path.getsize(new_exe) if os.path.exists(new_exe) else 0
+                if size < 1_000_000:  # .exe asli ukurannya puluhan MB
+                    raise RuntimeError(f"file hasil unduhan cuma {size} byte "
+                                       "— kemungkinan rusak/kepotong")
+
+                digest = hasher.hexdigest()
+                if expected_hash and digest != expected_hash:
+                    raise RuntimeError("hash file tidak cocok (unduhan "
+                                       "kemungkinan rusak di tengah jalan)")
+
+                ok = True
+                break
+            except Exception as exc:          # noqa: BLE001
+                last_err = exc
+                try:
+                    if os.path.exists(new_exe):
+                        os.remove(new_exe)
+                except OSError:
+                    pass
+
+        if not ok:
+            self.ui(self.log, f"[UPDATE] Gagal mengunduh update dengan aman "
+                              f"(dicoba {MAX_ATTEMPTS}x): {last_err} — "
+                              ".exe yang sedang jalan tidak diubah, akan "
+                              "dicoba lagi lain kali.", "err")
             return
 
         try:
+            # Retry "move" beberapa kali (bukan cuma sekali) — exe lama
+            # kadang belum sempat benar-benar lepas file handle-nya tepat
+            # 2 detik setelah proses ini exit. Sebelum ditimpa, exe LAMA
+            # disimpan dulu sebagai ".bak" (bukan langsung hilang) — jaga-
+            # jaga kalau walau sudah lolos verifikasi hash di Python tadi,
+            # exe baru ternyata tetap bermasalah: tinggal rename manual
+            # "BOT_by_Zierra.exe.bak" -> "BOT_by_Zierra.exe" untuk balik ke
+            # versi sebelumnya, tidak perlu download ulang dari nol.
             bat_content = (
                 "@echo off\r\n"
                 "timeout /t 2 /nobreak >nul\r\n"
-                f'move /y "{new_exe}" "{current_exe}"\r\n'
+                f'if exist "{current_exe}.bak" del /f /q "{current_exe}.bak"\r\n'
+                f'if exist "{current_exe}" move /y "{current_exe}" "{current_exe}.bak" >nul 2>nul\r\n'
+                "set tries=0\r\n"
+                ":retry\r\n"
+                f'move /y "{new_exe}" "{current_exe}" >nul 2>nul\r\n'
+                "if exist \"" + new_exe + "\" (\r\n"
+                "  set /a tries+=1\r\n"
+                "  if %tries% lss 10 (\r\n"
+                "    timeout /t 1 /nobreak >nul\r\n"
+                "    goto retry\r\n"
+                "  )\r\n"
+                ")\r\n"
                 f'start "" "{current_exe}"\r\n'
                 'del "%~f0"\r\n'
             )
