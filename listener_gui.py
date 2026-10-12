@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.1"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -827,6 +827,11 @@ class App(tk.Tk):
                      height=30, fill=ACCENT, bg=CARD).grid(
             row=1, column=2, sticky="w", padx=(14, 0))
 
+        self._build_volume_panel()
+        self._build_auto_terima_panel()
+        self._build_auto_tawar_panel()
+        self._build_notes_row()
+
     # Tombol modifier yang diabaikan kalau ditekan sendirian saat capture
     # (bukan hotkey yang valid tanpa tombol lain) — tunggu tombol berikutnya.
     HOTKEY_MODIFIER_KEYSYMS = {
@@ -896,11 +901,6 @@ class App(tk.Tk):
         widget.unbind("<FocusOut>")
         self._hotkey_capture_widget = None
         self._hotkey_capture_which = None
-
-        self._build_volume_panel()
-        self._build_auto_terima_panel()
-        self._build_auto_tawar_panel()
-        self._build_notes_row()
 
         self.refresh_buttons()
         self.footer.config(text="Menunggu pesan berlabel *MASUK*")

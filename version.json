@@ -1,6 +1,6 @@
 {
-  "version": "1.5.0",
+  "version": "1.5.1",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Scrollbar horizontal otomatis muncul kalau jendela terlalu sempit (field tidak kepotong lagi). Hotkey Terima/Tawar sekarang diatur dengan klik kotaknya lalu tekan tombolnya langsung (bukan ketik manual). Catatan Hari Ini sekarang menampilkan Deadline dan tombol \"Buka Detail\" ke link job-nya."
+  "notes": "Perbaikan bug: panel Volume Notifikasi, Auto Terima, Auto Tawar, dan Catatan Hari Ini sempat tidak muncul sama sekali di tampilan (v1.5.0) karena salah taruh kode saat menambah fitur ganti hotkey. Sekarang sudah tampil normal lagi seperti biasa."
 }
