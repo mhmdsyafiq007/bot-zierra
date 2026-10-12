@@ -19,6 +19,18 @@ on:
 permissions:
   contents: write
 
+# PENTING: kalau beberapa push terjadi berdekatan (mis. beberapa commit
+# fitur dalam beberapa menit), tanpa ini beberapa run workflow bisa jalan
+# BERBARENGAN dan rebutan menimpa asset .exe di release "latest" yang
+# sama di saat bersamaan — itulah kemungkinan besar penyebab error
+# "Failed to load Python DLL" yang berulang: bot sempat mengunduh pas
+# asset-nya lagi ditulis ulang oleh run lain. Dengan ini, run baru
+# otomatis membatalkan run sebelumnya yang masih jalan untuk ref yang
+# sama, jadi cuma satu run yang pernah menulis ke "latest" di satu waktu.
+concurrency:
+  group: build-release
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
