@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Catatan Job Proses sekarang juga dengar pesan *PAID*/*DONE* di grup (dicocokkan ke job kita lewat Ref) supaya status proses terdeteksi lebih cepat, bukan cuma lewat polling tiap 45 detik — pesan PAID/DONE job orang lain otomatis diabaikan. Build & rilis .exe sekarang otomatis lewat GitHub Actions tiap push ke main."
+  "notes": "Tambah syarat \"Kata min\" untuk Humanizer di Auto Terima dan Auto Tawar (dulu cuma ada \"Kata max\") — kosongkan untuk tidak dipakai."
 }

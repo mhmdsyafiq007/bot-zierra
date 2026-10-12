@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -1001,6 +1001,9 @@ class App(tk.Tk):
                 ]
                 if jenis == "Humanizer":
                     field_defs.append(
+                        ("min_word_count", "Kata min", settings.get("min_word_count"))
+                    )
+                    field_defs.append(
                         ("max_word_count", "Kata max", settings.get("max_word_count"))
                     )
                 for col, (key, label, value) in enumerate(field_defs):
@@ -1131,6 +1134,8 @@ class App(tk.Tk):
                         "deadline_max_h": read(entries["deadline_max_h"]),
                     }
                     if jenis == "Humanizer":
+                        s["min_word_count"] = read(entries["min_word_count"],
+                                                   allow_blank=True)
                         s["max_word_count"] = read(entries["max_word_count"],
                                                    allow_blank=True)
                 else:  # Fix File
@@ -1326,6 +1331,9 @@ class App(tk.Tk):
                 ]
                 if jenis == "Humanizer":
                     field_defs.append(
+                        ("min_word_count", "Kata min", settings.get("min_word_count"))
+                    )
+                    field_defs.append(
                         ("max_word_count", "Kata max", settings.get("max_word_count"))
                     )
                 for col, (key, label, value) in enumerate(field_defs):
@@ -1462,6 +1470,8 @@ class App(tk.Tk):
                         "target_tawar_pct": target_tawar_pct,
                     }
                     if jenis == "Humanizer":
+                        s["min_word_count"] = read(entries["min_word_count"],
+                                                   allow_blank=True)
                         s["max_word_count"] = read(entries["max_word_count"],
                                                    allow_blank=True)
                 else:  # Fix File
@@ -1831,6 +1841,7 @@ class App(tk.Tk):
             "min_client_price": data.get("auto_min_client_price", 100000),
             "deadline_min_h": data.get("auto_deadline_min_h", 2),
             "deadline_max_h": data.get("auto_deadline_max_h", 48),
+            "min_word_count": data.get("auto_min_word_count"),
             "max_word_count": data.get("auto_max_word_count", 3000),
         }
         fixfile_defaults = {
@@ -1868,7 +1879,7 @@ class App(tk.Tk):
         # auto_jenis_settings di atas.
         for old_key in ("auto_jenis", "auto_min_target", "auto_min_client_pct",
                         "auto_deadline_min_h", "auto_deadline_max_h",
-                        "auto_max_word_count"):
+                        "auto_max_word_count", "auto_min_word_count"):
             data.pop(old_key, None)
         self._write_raw_config(data)
 
@@ -1907,7 +1918,7 @@ class App(tk.Tk):
         humanizer_defaults = {
             "enabled": False, "target_min": 0, "target_max": 20,
             "max_client_pct": 70, "deadline_min_h": 2, "deadline_max_h": 48,
-            "max_word_count": 3000,
+            "min_word_count": None, "max_word_count": 3000,
             "use_target_tawar": False, "target_tawar_pct": None,
         }
         fixfile_defaults = {
@@ -2607,13 +2618,16 @@ class App(tk.Tk):
                 return False
 
             if jenis == "Humanizer":
+                min_words = settings.get("min_word_count")
                 max_words = settings.get("max_word_count")
-                if max_words not in (None, ""):
+                if min_words not in (None, "") or max_words not in (None, ""):
                     try:
                         words = float(info.get("word_count_raw"))
                     except (TypeError, ValueError):
                         return False
-                    if words >= float(max_words):
+                    if min_words not in (None, "") and words < float(min_words):
+                        return False
+                    if max_words not in (None, "") and words >= float(max_words):
                         return False
 
         elif jenis == "Fix File":
@@ -2697,13 +2711,16 @@ class App(tk.Tk):
                 return False
 
             if jenis == "Humanizer":
+                min_words = settings.get("min_word_count")
                 max_words = settings.get("max_word_count")
-                if max_words not in (None, ""):
+                if min_words not in (None, "") or max_words not in (None, ""):
                     try:
                         words = float(info.get("word_count_raw"))
                     except (TypeError, ValueError):
                         return False
-                    if words >= float(max_words):
+                    if min_words not in (None, "") and words < float(min_words):
+                        return False
+                    if max_words not in (None, "") and words >= float(max_words):
                         return False
 
         elif jenis == "Fix File":
