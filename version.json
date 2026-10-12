@@ -1,6 +1,6 @@
 {
-  "version": "1.4.1",
+  "version": "1.5.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan auto-update: download .exe baru sekarang diverifikasi (SHA-256) sebelum menimpa yang lama, dan exe lama disimpan sebagai .bak dulu — supaya unduhan yang rusak/kepotong (penyebab error \"Failed to load Python DLL\") tidak sampai merusak aplikasi yang sedang jalan."
+  "notes": "Scrollbar horizontal otomatis muncul kalau jendela terlalu sempit (field tidak kepotong lagi). Hotkey Terima/Tawar sekarang diatur dengan klik kotaknya lalu tekan tombolnya langsung (bukan ketik manual). Catatan Hari Ini sekarang menampilkan Deadline dan tombol \"Buka Detail\" ke link job-nya."
 }

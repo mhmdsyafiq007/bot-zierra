@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.5.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -388,6 +388,15 @@ class App(tk.Tk):
                         darkcolor=CARD, lightcolor=CARD)
         style.map("Dark.Vertical.TScrollbar",
                   background=[("active", ACCENT_DEEP), ("pressed", ACCENT_DEEP)])
+        # Scrollbar HORIZONTAL body — dipasang kalau jendela terlalu
+        # sempit untuk menampung semua kolom syarat sekaligus (mis. panel
+        # Humanizer dengan banyak field), lihat _on_body_canvas_resize.
+        style.configure("Dark.Horizontal.TScrollbar",
+                        background=FIELD_EDGE, troughcolor=CARD,
+                        bordercolor=CARD, arrowcolor=TEXT,
+                        darkcolor=CARD, lightcolor=CARD)
+        style.map("Dark.Horizontal.TScrollbar",
+                  background=[("active", ACCENT_DEEP), ("pressed", ACCENT_DEEP)])
         # Varian trough FIELD khusus untuk scrollbar di sebelah log box
         # (yang latarnya FIELD, bukan CARD seperti body).
         style.configure("DarkField.Vertical.TScrollbar",
@@ -442,17 +451,28 @@ class App(tk.Tk):
         inner = tk.Frame(outer, bg=CARD)
         inner.pack(fill="both", expand=True)
 
-        # Seluruh isi "body" dibungkus Canvas+Scrollbar supaya bisa
-        # digulir kalau jendela terlalu kecil/pendek untuk menampung
-        # semua panel sekaligus (mis. Auto Terima dengan banyak syarat).
-        # Scrollbar sendiri baru dipasang kalau memang diperlukan (lihat
-        # _on_body_scroll), supaya tidak selalu kelihatan kalau isinya pas.
+        # Seluruh isi "body" dibungkus Canvas+Scrollbar (vertikal DAN
+        # horizontal) supaya bisa digulir kalau jendela terlalu kecil
+        # untuk menampung semua panel sekaligus (vertikal — mis. Auto
+        # Terima dengan banyak syarat) ATAU terlalu SEMPIT untuk
+        # menampung semua kolom satu baris syarat (horizontal — mis.
+        # panel Humanizer dengan banyak field, kepotong di kanan kalau
+        # jendela windowed dikecilkan). Dua-duanya baru dipasang kalau
+        # memang diperlukan (lihat _on_body_scroll/_on_body_hscroll),
+        # supaya tidak selalu kelihatan kalau isinya pas.
+        inner.grid_rowconfigure(0, weight=1)
+        inner.grid_columnconfigure(0, weight=1)
+
         self.body_canvas = tk.Canvas(inner, bg=CARD, highlightthickness=0, bd=0)
         self.body_scroll = ttk.Scrollbar(inner, orient="vertical",
                                          command=self.body_canvas.yview,
                                          style="Dark.Vertical.TScrollbar")
-        self.body_canvas.configure(yscrollcommand=self._on_body_scroll)
-        self.body_canvas.pack(side="left", fill="both", expand=True)
+        self.body_hscroll = ttk.Scrollbar(inner, orient="horizontal",
+                                          command=self.body_canvas.xview,
+                                          style="Dark.Horizontal.TScrollbar")
+        self.body_canvas.configure(yscrollcommand=self._on_body_scroll,
+                                   xscrollcommand=self._on_body_hscroll)
+        self.body_canvas.grid(row=0, column=0, sticky="nsew")
 
         self.body = tk.Frame(self.body_canvas, bg=CARD, padx=22, pady=20)
         self.body_window = self.body_canvas.create_window(
@@ -463,6 +483,7 @@ class App(tk.Tk):
 
         # Scroll roda mouse hanya aktif selagi kursor di atas body, supaya
         # tidak "mencuri" scroll widget lain (mis. dropdown) saat lewat.
+        # Roda biasa = vertikal, Shift+roda = horizontal (konvensi umum).
         self.body_canvas.bind("<Enter>", lambda e: self._bind_mousewheel())
         self.body_canvas.bind("<Leave>", lambda e: self._unbind_mousewheel())
 
@@ -473,25 +494,45 @@ class App(tk.Tk):
         self.body_canvas.configure(scrollregion=self.body_canvas.bbox("all"))
 
     def _on_body_canvas_resize(self, event):
-        # Isi body dipaksa selebar canvas -> elemen ber-sticky "ew" di
-        # dalamnya benar-benar bisa melebar penuh mengikuti jendela,
-        # tidak lagi mepet/mentok di kiri saat jendela dilebarkan.
-        self.body_canvas.itemconfig(self.body_window, width=event.width)
+        # Lebar isi body MENGIKUTI canvas kalau canvas lebih lebar dari
+        # kebutuhan asli body (supaya elemen ber-sticky "ew" melebar
+        # penuh seperti biasa) — tapi TIDAK dipaksa menyempit di bawah
+        # lebar asli yang dibutuhkan isinya (winfo_reqwidth). Kalau
+        # jendela dikecilkan sampai lebih sempit dari itu, body tetap
+        # selebar aslinya dan scrollbar horizontal muncul untuk
+        # menggulir ke bagian yang kepotong, bukan memaksa field-field
+        # saling tindih/kepotong permanen.
+        body_reqwidth = self.body.winfo_reqwidth()
+        new_width = max(event.width, body_reqwidth)
+        self.body_canvas.itemconfig(self.body_window, width=new_width)
 
     def _on_body_scroll(self, first, last):
         """Dipanggil tiap scrollregion berubah — scrollbar cuma dipasang
         kalau isi body memang lebih panjang dari area yang kelihatan."""
         if float(first) <= 0.0 and float(last) >= 1.0:
-            self.body_scroll.pack_forget()
+            self.body_scroll.grid_remove()
         else:
-            self.body_scroll.pack(side="right", fill="y")
+            self.body_scroll.grid(row=0, column=1, sticky="ns")
         self.body_scroll.set(first, last)
+
+    def _on_body_hscroll(self, first, last):
+        """Sama seperti _on_body_scroll tapi untuk arah horizontal."""
+        if float(first) <= 0.0 and float(last) >= 1.0:
+            self.body_hscroll.grid_remove()
+        else:
+            self.body_hscroll.grid(row=1, column=0, sticky="ew")
+        self.body_hscroll.set(first, last)
 
     def _bind_mousewheel(self):
         self.body_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.body_canvas.bind_all("<Shift-MouseWheel>", self._on_mousewheel_h)
 
     def _unbind_mousewheel(self):
         self.body_canvas.unbind_all("<MouseWheel>")
+        self.body_canvas.unbind_all("<Shift-MouseWheel>")
+
+    def _on_mousewheel_h(self, event):
+        self.body_canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def _on_mousewheel(self, event):
         self.body_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -769,23 +810,92 @@ class App(tk.Tk):
                  font=(FONT, 7, "bold")).grid(row=0, column=1, sticky="w",
                                               padx=(14, 0))
 
-        self.e_hotkey_terima = tk.Entry(settings_row, bg=FIELD, fg=TEXT,
-                                        relief="flat", width=8, font=(FONT, 10),
-                                        insertbackground=ACCENT)
-        self.e_hotkey_terima.insert(0, self.hotkey_terima)
-        self.e_hotkey_terima.grid(row=1, column=0, sticky="w", pady=(3, 0),
-                                  ipady=3)
+        # Hotkey tidak lagi diketik manual (rawan salah nama tombol) —
+        # klik kotaknya lalu TEKAN tombol yang mau dipakai, otomatis
+        # terisi. Lihat _start_hotkey_capture dkk.
+        self._pending_hotkey_terima = self.hotkey_terima
+        self._pending_hotkey_tawar = self.hotkey_tawar
+        self._hotkey_capture_which = None
+        self._hotkey_capture_widget = None
 
-        self.e_hotkey_tawar = tk.Entry(settings_row, bg=FIELD, fg=TEXT,
-                                       relief="flat", width=8, font=(FONT, 10),
-                                       insertbackground=ACCENT)
-        self.e_hotkey_tawar.insert(0, self.hotkey_tawar)
-        self.e_hotkey_tawar.grid(row=1, column=1, sticky="w", padx=(14, 0),
-                                 pady=(3, 0), ipady=3)
+        self.hotkey_field_terima = self._build_hotkey_field(
+            settings_row, self.hotkey_terima, row=1, col=0, which="terima")
+        self.hotkey_field_tawar = self._build_hotkey_field(
+            settings_row, self.hotkey_tawar, row=1, col=1, which="tawar")
 
         RoundedButton(settings_row, "Simpan", self.save_hotkeys, width=90,
                      height=30, fill=ACCENT, bg=CARD).grid(
             row=1, column=2, sticky="w", padx=(14, 0))
+
+    # Tombol modifier yang diabaikan kalau ditekan sendirian saat capture
+    # (bukan hotkey yang valid tanpa tombol lain) — tunggu tombol berikutnya.
+    HOTKEY_MODIFIER_KEYSYMS = {
+        "Shift_L", "Shift_R", "Control_L", "Control_R",
+        "Alt_L", "Alt_R", "Super_L", "Super_R",
+        "Caps_Lock", "Num_Lock", "Scroll_Lock",
+    }
+
+    def _build_hotkey_field(self, parent, initial_value, row, col, which):
+        """Kotak kecil mirip field, tapi diklik (bukan diketik) untuk
+        mengganti hotkey — klik lalu tekan tombol fisiknya langsung."""
+        box = tk.Label(parent, text=initial_value.upper(), bg=FIELD, fg=TEXT,
+                       font=(FONT, 10, "bold"), width=8, relief="flat",
+                       cursor="hand2", padx=4, pady=5, takefocus=1)
+        box.bind("<Button-1>",
+                 lambda e, w=which, b=box: self._start_hotkey_capture(w, b))
+        box.grid(row=row, column=col, sticky="w", pady=(3, 0))
+        return box
+
+    def _start_hotkey_capture(self, which, widget):
+        """Dipanggil saat kotak hotkey diklik — masuk mode "menunggu
+        tombol", tangkap keypress BERIKUTNYA di kotak ini saja (bukan
+        global/keyboard-lib, cukup event Tkinter biasa karena user pasti
+        sedang fokus ke jendela aplikasi saat klik kotaknya)."""
+        if self._hotkey_capture_widget is not None:
+            self._cancel_hotkey_capture()  # batalkan capture lain yg nyangkut
+        self._hotkey_capture_which = which
+        self._hotkey_capture_widget = widget
+        widget.configure(text="Tekan tombol...", fg=ACCENT)
+        widget.focus_set()
+        widget.bind("<KeyPress>", self._on_hotkey_capture_keypress)
+        widget.bind("<FocusOut>", lambda e: self._cancel_hotkey_capture())
+
+    def _on_hotkey_capture_keypress(self, event):
+        keysym = event.keysym
+        if keysym in self.HOTKEY_MODIFIER_KEYSYMS:
+            return  # modifier sendirian — terus tunggu tombol berikutnya
+        if keysym == "Escape":
+            self._cancel_hotkey_capture()  # batal, balik ke nilai lama
+            return
+        # Keysym Tkinter untuk huruf ikut status Shift (mis. "A" kalau
+        # Shift ditekan) — di-lower supaya konsisten dengan format yang
+        # dipakai pustaka `keyboard` (huruf kecil semua, mis. "f2", "a").
+        key_name = keysym.lower()
+        which = self._hotkey_capture_which
+        widget = self._hotkey_capture_widget
+        if which == "terima":
+            self._pending_hotkey_terima = key_name
+        else:
+            self._pending_hotkey_tawar = key_name
+        widget.configure(text=key_name.upper(), fg=TEXT)
+        self._finish_hotkey_capture()
+
+    def _cancel_hotkey_capture(self):
+        widget = self._hotkey_capture_widget
+        if widget is None:
+            return
+        current = (self._pending_hotkey_terima
+                   if self._hotkey_capture_which == "terima"
+                   else self._pending_hotkey_tawar)
+        widget.configure(text=current.upper(), fg=TEXT)
+        self._finish_hotkey_capture()
+
+    def _finish_hotkey_capture(self):
+        widget = self._hotkey_capture_widget
+        widget.unbind("<KeyPress>")
+        widget.unbind("<FocusOut>")
+        self._hotkey_capture_widget = None
+        self._hotkey_capture_which = None
 
         self._build_volume_panel()
         self._build_auto_terima_panel()
@@ -1566,10 +1676,24 @@ class App(tk.Tk):
                               f"{note.get('time', '-')}  ·  {note.get('ref', '-')}",
                          bg=FIELD, fg=MUTED, font=(FONT, 8), anchor="w"
                          ).pack(anchor="w")
+                tk.Label(info_col,
+                         text=f"Deadline: {note.get('deadline', '-')}",
+                         bg=FIELD, fg=MUTED, font=(FONT, 8), anchor="w"
+                         ).pack(anchor="w")
+
+                btn_col = tk.Frame(item, bg=FIELD)
+                btn_col.pack(side="right")
                 RoundedButton(
-                    item, "Hapus", lambda idx=i: self.remove_job_note(idx),
+                    btn_col, "Hapus", lambda idx=i: self.remove_job_note(idx),
                     width=60, height=26, fill=RED, bg=FIELD,
                 ).pack(side="right")
+                url = note.get("url")
+                if url:
+                    RoundedButton(
+                        btn_col, "Buka Detail",
+                        lambda u=url: webbrowser.open(u),
+                        width=90, height=26, fill=ACCENT, bg=FIELD,
+                    ).pack(side="right", padx=(0, 6))
 
             RoundedButton(
                 pad, "Hapus Semua", self.clear_job_notes,
@@ -1608,6 +1732,8 @@ class App(tk.Tk):
             "ref": ref,
             "jenis": job.get("jenis") or "-",
             "harga_client": job.get("harga_client") or "-",
+            "deadline": job.get("deadline") or "-",
+            "url": job.get("url") or "",
             "status": status_baru,
             "time": _dt.now().strftime("%H:%M"),
         }
@@ -2520,8 +2646,8 @@ class App(tk.Tk):
             self.job_popup.destroy()
 
     def save_hotkeys(self):
-        new_terima = self.e_hotkey_terima.get().strip().lower() or "f2"
-        new_tawar = self.e_hotkey_tawar.get().strip().lower() or "f3"
+        new_terima = (self._pending_hotkey_terima or "f2").strip().lower()
+        new_tawar = (self._pending_hotkey_tawar or "f3").strip().lower()
         self.hotkey_terima = new_terima
         self.hotkey_tawar = new_tawar
         self.save_config(self.api_id, self.api_hash, new_terima, new_tawar)
@@ -2653,6 +2779,9 @@ class App(tk.Tk):
         # titik awal perbandingan status.
         self.current_job["status"] = info.get("status")
         self.current_job["harga_client"] = info.get("harga_client")
+        # Dipakai fitur Catatan Job Proses (_add_job_note) — deadline
+        # berformat teks, ditampilkan di popup Catatan Hari Ini.
+        self.current_job["deadline"] = info.get("deadline")
 
     def _open_job(self, url):
         """Tampilkan halaman detail job di tab Chrome debug. Sengaja TIDAK
