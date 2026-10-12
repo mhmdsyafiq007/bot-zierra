@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.5.1"
+APP_VERSION = "1.6.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -995,6 +995,36 @@ class App(tk.Tk):
         "Perbaikan typo",
     )
 
+    def _build_criteria_grid(self, sub, rows, entries_out):
+        """Bangun field-field syarat sebagai grid MAKS 2 KOLOM (bukan satu
+        baris panjang ke samping) supaya kotak Parafrase/Humanizer/Fix
+        File tidak pernah kepotong atau perlu discroll ke samping saat
+        jendela sempit — kotaknya jadi melebar ke BAWAH, bukan ke kanan.
+        Kalau jendela cukup lebar, kotaknya tetap boleh mengisi lebar
+        penuh panel (cuma jadi ada ruang kosong di kanan), tidak masalah.
+
+        `rows` = list baris, tiap baris berisi maks 2 item, masing2 None
+        (kosong, dilewati) atau tuple (key, label, value). Baris field
+        dimulai dari grid row=1 di `sub` (row=0 dipakai judul jenis).
+        Return baris kosong berikutnya yang masih bisa dipakai di `sub`
+        (dipakai pemanggil untuk menaruh elemen lain setelah grid ini,
+        mis. baris checkbox service Fix File)."""
+        for r, row_items in enumerate(rows, start=1):
+            for col, item in enumerate(row_items):
+                if item is None:
+                    continue
+                key, label, value = item
+                wrapper = tk.Frame(sub, bg=CARD)
+                wrapper.grid(row=r, column=col, sticky="w", padx=8, pady=(0, 6))
+                tk.Label(wrapper, text=label.upper(), bg=CARD, fg=MUTED,
+                         font=(FONT, 7, "bold"), anchor="w").pack(anchor="w")
+                entry = tk.Entry(wrapper, bg=FIELD, fg=TEXT, relief="flat",
+                                 width=10, font=(FONT, 10), insertbackground=ACCENT)
+                entry.insert(0, "" if value is None else str(value))
+                entry.pack(anchor="w", ipady=3, pady=(2, 0))
+                entries_out[key] = entry
+        return len(rows) + 1
+
     def _build_auto_terima_panel(self):
         """Panel syarat Auto Terima. Jenis sekarang multiselect (checkbox),
         tiap jenis yang dicentang memunculkan panel syaratnya sendiri-
@@ -1094,7 +1124,7 @@ class App(tk.Tk):
 
             tk.Label(sub, text=jenis.upper(), bg=CARD, fg=ACCENT,
                      font=(FONT, 8, "bold")).grid(
-                row=0, column=0, columnspan=6, sticky="w", padx=8, pady=(6, 4))
+                row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(6, 4))
 
             settings = self.auto_jenis_settings.get(jenis, {})
             self.auto_entries[jenis] = {}
@@ -1102,55 +1132,39 @@ class App(tk.Tk):
             if jenis in ("Parafrase", "Humanizer"):
                 # Target min artinya target HARUS DI ATAS angka ini (bukan
                 # minimal termasuk) — isi 15 berarti target >15 yang lolos.
-                field_defs = [
-                    ("min_target", "Target min (%)", settings.get("min_target")),
-                    ("min_client_pct", "Client min (%)", settings.get("min_client_pct")),
-                    ("min_client_price", "Client min (Rp)", settings.get("min_client_price")),
-                    ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
-                    ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
+                # Grid 2 kolom (bukan 1 baris panjang ke samping) supaya
+                # kotak ini melebar ke BAWAH, bukan kepotong/perlu scroll
+                # ke kanan saat jendela sempit.
+                rows = [
+                    [("min_target", "Target min (%)", settings.get("min_target")),
+                     ("min_client_pct", "Client min (%)", settings.get("min_client_pct"))],
+                    [None,
+                     ("min_client_price", "Client min (Rp)", settings.get("min_client_price"))],
+                    [("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
+                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h"))],
                 ]
                 if jenis == "Humanizer":
-                    field_defs.append(
-                        ("min_word_count", "Kata min", settings.get("min_word_count"))
-                    )
-                    field_defs.append(
-                        ("max_word_count", "Kata max", settings.get("max_word_count"))
-                    )
-                for col, (key, label, value) in enumerate(field_defs):
-                    wrapper = tk.Frame(sub, bg=CARD)
-                    wrapper.grid(row=1, column=col, sticky="w", padx=8)
-                    tk.Label(wrapper, text=label.upper(), bg=CARD, fg=MUTED,
-                             font=(FONT, 7, "bold"), anchor="w").pack(anchor="w")
-                    entry = tk.Entry(wrapper, bg=FIELD, fg=TEXT, relief="flat",
-                                     width=8, font=(FONT, 10), insertbackground=ACCENT)
-                    entry.insert(0, "" if value is None else str(value))
-                    entry.pack(anchor="w", ipady=3, pady=(2, 0))
-                    self.auto_entries[jenis][key] = entry
+                    rows.append([
+                        ("min_word_count", "Kata min", settings.get("min_word_count")),
+                        ("max_word_count", "Kata max", settings.get("max_word_count")),
+                    ])
+                self._build_criteria_grid(sub, rows, self.auto_entries[jenis])
 
             else:  # Fix File — tidak ada Target Persentase, diganti syarat
                    # perbandingan harga + deadline + pilihan layanan.
-                field_defs = [
-                    ("min_client_pct", "Client min (%)", settings.get("min_client_pct")),
-                    ("min_client_price", "Client min (Rp)", settings.get("min_client_price")),
-                    ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
-                    ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
+                rows = [
+                    [("min_client_pct", "Client min (%)", settings.get("min_client_pct")), None],
+                    [("min_client_price", "Client min (Rp)", settings.get("min_client_price")), None],
+                    [("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
+                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h"))],
                 ]
-                for col, (key, label, value) in enumerate(field_defs):
-                    wrapper = tk.Frame(sub, bg=CARD)
-                    wrapper.grid(row=1, column=col, sticky="w", padx=8)
-                    tk.Label(wrapper, text=label.upper(), bg=CARD, fg=MUTED,
-                             font=(FONT, 7, "bold"), anchor="w").pack(anchor="w")
-                    entry = tk.Entry(wrapper, bg=FIELD, fg=TEXT, relief="flat",
-                                     width=8, font=(FONT, 10), insertbackground=ACCENT)
-                    entry.insert(0, "" if value is None else str(value))
-                    entry.pack(anchor="w", ipady=3, pady=(2, 0))
-                    self.auto_entries[jenis][key] = entry
+                next_row = self._build_criteria_grid(sub, rows, self.auto_entries[jenis])
 
                 # Grid (bukan pack side=left) supaya dua kotak ini benar2
                 # berbagi lebar penuh "sub" secara merata dan tidak
                 # mengumpul/mepet di kiri saat panel melebar.
                 service_row = tk.Frame(sub, bg=CARD)
-                service_row.grid(row=2, column=0, columnspan=6, sticky="ew",
+                service_row.grid(row=next_row, column=0, columnspan=2, sticky="ew",
                                  padx=8, pady=(10, 0))
                 service_row.grid_columnconfigure(0, weight=1, uniform="svc")
                 service_row.grid_columnconfigure(1, weight=1, uniform="svc")
@@ -1432,54 +1446,38 @@ class App(tk.Tk):
                 # cuma "di atas X"), dan harga client disyaratkan DI
                 # BAWAH persentase ini — fallback untuk job yang kurang
                 # bagus buat Terima langsung tapi masih worth ditawar.
-                field_defs = [
-                    ("target_min", "Target min (%)", settings.get("target_min")),
-                    ("target_max", "Target max (%)", settings.get("target_max")),
-                    ("max_client_pct", "Client max (%)", settings.get("max_client_pct")),
-                    ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
-                    ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
+                # Grid 2 kolom (bukan 1 baris panjang ke samping) supaya
+                # kotak ini melebar ke BAWAH, bukan kepotong/perlu scroll
+                # ke kanan saat jendela sempit.
+                rows = [
+                    [("target_min", "Target min (%)", settings.get("target_min")),
+                     ("target_max", "Target max (%)", settings.get("target_max"))],
+                    [None,
+                     ("max_client_pct", "Client max (%)", settings.get("max_client_pct"))],
+                    [("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
+                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h"))],
                 ]
                 if jenis == "Humanizer":
-                    field_defs.append(
-                        ("min_word_count", "Kata min", settings.get("min_word_count"))
-                    )
-                    field_defs.append(
-                        ("max_word_count", "Kata max", settings.get("max_word_count"))
-                    )
-                for col, (key, label, value) in enumerate(field_defs):
-                    wrapper = tk.Frame(sub, bg=CARD)
-                    wrapper.grid(row=1, column=col, sticky="w", padx=8)
-                    tk.Label(wrapper, text=label.upper(), bg=CARD, fg=MUTED,
-                             font=(FONT, 7, "bold"), anchor="w").pack(anchor="w")
-                    entry = tk.Entry(wrapper, bg=FIELD, fg=TEXT, relief="flat",
-                                     width=8, font=(FONT, 10), insertbackground=ACCENT)
-                    entry.insert(0, "" if value is None else str(value))
-                    entry.pack(anchor="w", ipady=3, pady=(2, 0))
-                    self.auto_tawar_entries[jenis][key] = entry
+                    rows.append([
+                        ("min_word_count", "Kata min", settings.get("min_word_count")),
+                        ("max_word_count", "Kata max", settings.get("max_word_count")),
+                    ])
+                next_row = self._build_criteria_grid(sub, rows, self.auto_tawar_entries[jenis])
 
-                self._build_target_tawar_row(sub, jenis, settings, row=2)
+                self._build_target_tawar_row(sub, jenis, settings, row=next_row)
 
             else:  # Fix File
-                field_defs = [
-                    ("max_client_pct", "Client max (%)", settings.get("max_client_pct")),
-                    ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
-                    ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
+                rows = [
+                    [("max_client_pct", "Client max (%)", settings.get("max_client_pct")), None],
+                    [("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
+                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h"))],
                 ]
-                for col, (key, label, value) in enumerate(field_defs):
-                    wrapper = tk.Frame(sub, bg=CARD)
-                    wrapper.grid(row=1, column=col, sticky="w", padx=8)
-                    tk.Label(wrapper, text=label.upper(), bg=CARD, fg=MUTED,
-                             font=(FONT, 7, "bold"), anchor="w").pack(anchor="w")
-                    entry = tk.Entry(wrapper, bg=FIELD, fg=TEXT, relief="flat",
-                                     width=8, font=(FONT, 10), insertbackground=ACCENT)
-                    entry.insert(0, "" if value is None else str(value))
-                    entry.pack(anchor="w", ipady=3, pady=(2, 0))
-                    self.auto_tawar_entries[jenis][key] = entry
+                next_row = self._build_criteria_grid(sub, rows, self.auto_tawar_entries[jenis])
 
-                self._build_target_tawar_row(sub, jenis, settings, row=2)
+                self._build_target_tawar_row(sub, jenis, settings, row=next_row)
 
                 service_row = tk.Frame(sub, bg=CARD)
-                service_row.grid(row=3, column=0, columnspan=6, sticky="ew",
+                service_row.grid(row=next_row + 1, column=0, columnspan=2, sticky="ew",
                                  padx=8, pady=(10, 0))
                 service_row.grid_columnconfigure(0, weight=1, uniform="svct")
                 service_row.grid_columnconfigure(1, weight=1, uniform="svct")
