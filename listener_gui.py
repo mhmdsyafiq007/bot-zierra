@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.6.2"
+APP_VERSION = "1.6.3"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -855,7 +855,18 @@ class App(tk.Tk):
         """Dipanggil saat kotak hotkey diklik — masuk mode "menunggu
         tombol", tangkap keypress BERIKUTNYA di kotak ini saja (bukan
         global/keyboard-lib, cukup event Tkinter biasa karena user pasti
-        sedang fokus ke jendela aplikasi saat klik kotaknya)."""
+        sedang fokus ke jendela aplikasi saat klik kotaknya).
+
+        Shortcut GLOBAL (lewat pustaka `keyboard`, lihat register_hotkeys)
+        tetap aktif di LUAR jendela aplikasi, jadi kalau tidak dimatikan
+        dulu, menekan tombol yang kebetulan sama dengan hotkey LAMA (mis.
+        F2) saat sedang memilih hotkey baru akan langsung memicu aksi
+        Terima/Tawar sungguhan — bukan cuma tertangkap sebagai nilai baru
+        di kotak ini. Makanya shortcut global DIMATIKAN SEMENTARA selama
+        proses capture, dan dihidupkan lagi (dengan hotkey yang masih
+        tersimpan sekarang, belum yang baru — itu baru berlaku kalau user
+        klik Simpan) begitu capture selesai, baik berhasil, dibatalkan,
+        maupun kotaknya kehilangan fokus."""
         if self._hotkey_capture_widget is not None:
             self._cancel_hotkey_capture()  # batalkan capture lain yg nyangkut
         self._hotkey_capture_which = which
@@ -864,6 +875,13 @@ class App(tk.Tk):
         widget.focus_set()
         widget.bind("<KeyPress>", self._on_hotkey_capture_keypress)
         widget.bind("<FocusOut>", lambda e: self._cancel_hotkey_capture())
+
+        if keyboard is not None and self._hotkeys_registered:
+            try:
+                keyboard.unhook_all_hotkeys()
+            except Exception:                      # noqa: BLE001
+                pass
+            self._hotkeys_registered = False
 
     def _on_hotkey_capture_keypress(self, event):
         keysym = event.keysym
@@ -901,6 +919,13 @@ class App(tk.Tk):
         widget.unbind("<FocusOut>")
         self._hotkey_capture_widget = None
         self._hotkey_capture_which = None
+
+        # Hidupkan lagi shortcut global yang dimatikan sementara di
+        # _start_hotkey_capture — pakai hotkey yang masih TERSIMPAN
+        # sekarang (self.hotkey_terima/tawar), bukan yang baru saja
+        # ditangkap (itu baru efektif setelah klik Simpan -> save_hotkeys).
+        if keyboard is not None:
+            self.register_hotkeys()
 
         self.refresh_buttons()
         self.footer.config(text="Menunggu pesan berlabel *MASUK*")

@@ -1,6 +1,6 @@
 {
-  "version": "1.6.2",
+  "version": "1.6.3",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan: jendela hitam kecil (console \"timeout\") yang sempat kelihatan sekilas tiap kali auto-update jalan sekarang sudah tidak muncul lagi — proses update tetap jalan di belakang layar sepenuhnya tanpa jendela apa pun."
+  "notes": "Perbaikan bug: saat mengatur ulang hotkey (klik kotak lalu tekan tombol), shortcut lama sempat masih aktif di latar dan langsung memicu aksi Terima/Tawar beneran kalau tombolnya sama. Sekarang shortcut dimatikan sementara selama proses pilih hotkey, dan otomatis aktif lagi begitu selesai (baik berhasil, dibatalkan, atau pindah fokus)."
 }
