@@ -1,6 +1,6 @@
 {
-  "version": "1.6.1",
+  "version": "1.6.2",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Field syarat Parafrase/Humanizer/Fix File (Auto Terima & Auto Tawar) sekarang tetap satu baris penuh ke kanan selama masih muat (termasuk saat full screen), dan baru otomatis melipat ke baris baru per field kalau jendelanya disempitkan sampai tidak muat lagi — jadi tidak kepotong tanpa perlu dipaksa ke bawah terus."
+  "notes": "Perbaikan: jendela hitam kecil (console \"timeout\") yang sempat kelihatan sekilas tiap kali auto-update jalan sekarang sudah tidak muncul lagi — proses update tetap jalan di belakang layar sepenuhnya tanpa jendela apa pun."
 }

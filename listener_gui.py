@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.6.1"
+APP_VERSION = "1.6.2"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2527,9 +2527,17 @@ class App(tk.Tk):
             # exe baru ternyata tetap bermasalah: tinggal rename manual
             # "BOT_by_Zierra.exe.bak" -> "BOT_by_Zierra.exe" untuk balik ke
             # versi sebelumnya, tidak perlu download ulang dari nol.
+            # Catatan: sengaja pakai "ping -n X 127.0.0.1 >nul" untuk jeda,
+            # BUKAN "timeout /t ..." — timeout.exe butuh console untuk baca
+            # input (meski /nobreak), jadi kalau tidak ada console (lihat
+            # CREATE_NO_WINDOW di bawah) dia malah mengalokasikan console
+            # BARU sendiri yang kelihatan sekilas (muncul jendela hitam
+            # "timeout /t 2 /nobreak" pas update). ping tidak butuh itu
+            # sama sekali, jadi tetap bener2 tersembunyi. (ping -n 3 ~= 2
+            # detik jeda, ping -n 2 ~= 1 detik, karena ping pertama instan.)
             bat_content = (
                 "@echo off\r\n"
-                "timeout /t 2 /nobreak >nul\r\n"
+                "ping -n 3 127.0.0.1 >nul\r\n"
                 f'if exist "{current_exe}.bak" del /f /q "{current_exe}.bak"\r\n'
                 f'if exist "{current_exe}" move /y "{current_exe}" "{current_exe}.bak" >nul 2>nul\r\n'
                 "set tries=0\r\n"
@@ -2538,7 +2546,7 @@ class App(tk.Tk):
                 "if exist \"" + new_exe + "\" (\r\n"
                 "  set /a tries+=1\r\n"
                 "  if %tries% lss 10 (\r\n"
-                "    timeout /t 1 /nobreak >nul\r\n"
+                "    ping -n 2 127.0.0.1 >nul\r\n"
                 "    goto retry\r\n"
                 "  )\r\n"
                 ")\r\n"
@@ -2549,9 +2557,15 @@ class App(tk.Tk):
                 f.write(bat_content)
 
             import subprocess
+            # CREATE_NO_WINDOW saja (TANPA DETACHED_PROCESS) — kombinasi
+            # keduanya justru yang bikin anak proses (cmd/timeout) merasa
+            # tidak punya console sama sekali dan mengalokasikan console
+            # barunya sendiri yang kelihatan. CREATE_NO_WINDOW saja sudah
+            # cukup: cmd.exe tetap dapat console (tersembunyi), jadi apa pun
+            # yang dijalankan di dalamnya ikut tersembunyi juga.
             subprocess.Popen(
                 ["cmd", "/c", bat_path],
-                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                creationflags=subprocess.CREATE_NO_WINDOW,
                 close_fds=True,
             )
             self.ui(self.log, "[UPDATE] Update diunduh — aplikasi akan "
