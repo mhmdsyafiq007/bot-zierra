@@ -1,6 +1,6 @@
 {
-  "version": "1.6.0",
+  "version": "1.6.1",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Layout kotak syarat Parafrase/Humanizer/Fix File di Auto Terima & Auto Tawar diubah jadi 2 kolom (melebar ke bawah, bukan ke kanan), jadi field seperti Kata Min/Client Min tidak kepotong lagi di jendela sempit — tanpa perlu scroll ke samping."
+  "notes": "Field syarat Parafrase/Humanizer/Fix File (Auto Terima & Auto Tawar) sekarang tetap satu baris penuh ke kanan selama masih muat (termasuk saat full screen), dan baru otomatis melipat ke baris baru per field kalau jendelanya disempitkan sampai tidak muat lagi — jadi tidak kepotong tanpa perlu dipaksa ke bawah terus."
 }
