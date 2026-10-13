@@ -1,6 +1,6 @@
 {
-  "version": "1.6.3",
+  "version": "1.7.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan bug: saat mengatur ulang hotkey (klik kotak lalu tekan tombol), shortcut lama sempat masih aktif di latar dan langsung memicu aksi Terima/Tawar beneran kalau tombolnya sama. Sekarang shortcut dimatikan sementara selama proses pilih hotkey, dan otomatis aktif lagi begitu selesai (baik berhasil, dibatalkan, atau pindah fokus)."
+  "notes": "Hotkey sekarang bisa F1-F12 dan kombinasi seperti Alt+X (capture dipindah ke level sistem, bukan event jendela biasa). Perbaikan bug log \"Login berhasil\" yang salah muncul tiap selesai atur hotkey. Scroll roda mouse di atas kotak Log sekarang diutamakan buat log itu sendiri dulu sampai mentok, baru lanjut scroll halaman — tidak lagi dobel scroll keduanya sekaligus."
 }

@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.6.3"
+APP_VERSION = "1.7.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -537,6 +537,24 @@ class App(tk.Tk):
     def _on_mousewheel(self, event):
         self.body_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
+    def _on_log_mousewheel(self, event):
+        """Dipasang di log_box sendiri (bukan bind_all), jadi cuma aktif
+        kalau kursor memang di atas kotak log. Scroll log dulu sampai
+        benar2 mentok (atas/bawah) — begitu diputar lagi melewati batas
+        itu, baru diteruskan ke scroll body di belakangnya, supaya tidak
+        kerasa "nyangkut" saat mau lanjut scroll halaman lewat kotak log.
+        Selalu return "break" supaya event ini tidak diproses dobel oleh
+        binding bind_all milik body (lihat _bind_mousewheel)."""
+        first, last = self.log_box.yview()
+        delta = int(-1 * (event.delta / 120))
+        at_top = float(first) <= 0.0
+        at_bottom = float(last) >= 1.0
+        if (delta < 0 and at_top) or (delta > 0 and at_bottom):
+            self._on_mousewheel(event)
+        else:
+            self.log_box.yview_scroll(delta, "units")
+        return "break"
+
     def _draw_header(self, event=None):
         c = self.header
         c.delete("all")
@@ -759,6 +777,14 @@ class App(tk.Tk):
         self.log_box.pack(fill="both", expand=True)
         scroll.config(command=self.log_box.yview)
 
+        # Scroll roda mouse selagi kursor DI ATAS kotak log diutamakan
+        # buat kotak log itu sendiri dulu (bukan ikut nge-scroll body di
+        # belakangnya) — baru kalau log-nya sudah mentok (atas/bawah) dan
+        # roda masih diputar ke arah yang sama, barulah body yang di-
+        # scroll. Binding ini di widget log_box langsung (bukan bind_all)
+        # jadi otomatis TIDAK berlaku kalau kursor di luar kotak log.
+        self.log_box.bind("<MouseWheel>", self._on_log_mousewheel)
+
         self.log_box.tag_config("hit", foreground=GREEN)
         self.log_box.tag_config("skip", foreground=MUTED)
         self.log_box.tag_config("sys", foreground=ACCENT)
@@ -817,6 +843,7 @@ class App(tk.Tk):
         self._pending_hotkey_tawar = self.hotkey_tawar
         self._hotkey_capture_which = None
         self._hotkey_capture_widget = None
+        self._hotkey_capture_token = None
 
         self.hotkey_field_terima = self._build_hotkey_field(
             settings_row, self.hotkey_terima, row=1, col=0, which="terima")
@@ -831,6 +858,10 @@ class App(tk.Tk):
         self._build_auto_terima_panel()
         self._build_auto_tawar_panel()
         self._build_notes_row()
+
+        self.refresh_buttons()
+        self.footer.config(text="Menunggu pesan berlabel *MASUK*")
+        self.log("Login berhasil. Tekan Start untuk mulai memantau.", "sys")
 
     # Tombol modifier yang diabaikan kalau ditekan sendirian saat capture
     # (bukan hotkey yang valid tanpa tombol lain) — tunggu tombol berikutnya.
@@ -853,28 +884,33 @@ class App(tk.Tk):
 
     def _start_hotkey_capture(self, which, widget):
         """Dipanggil saat kotak hotkey diklik — masuk mode "menunggu
-        tombol", tangkap keypress BERIKUTNYA di kotak ini saja (bukan
-        global/keyboard-lib, cukup event Tkinter biasa karena user pasti
-        sedang fokus ke jendela aplikasi saat klik kotaknya).
+        tombol".
 
-        Shortcut GLOBAL (lewat pustaka `keyboard`, lihat register_hotkeys)
-        tetap aktif di LUAR jendela aplikasi, jadi kalau tidak dimatikan
-        dulu, menekan tombol yang kebetulan sama dengan hotkey LAMA (mis.
-        F2) saat sedang memilih hotkey baru akan langsung memicu aksi
-        Terima/Tawar sungguhan — bukan cuma tertangkap sebagai nilai baru
-        di kotak ini. Makanya shortcut global DIMATIKAN SEMENTARA selama
-        proses capture, dan dihidupkan lagi (dengan hotkey yang masih
-        tersimpan sekarang, belum yang baru — itu baru berlaku kalau user
-        klik Simpan) begitu capture selesai, baik berhasil, dibatalkan,
-        maupun kotaknya kehilangan fokus."""
+        Kalau pustaka `keyboard` tersedia, capture dilakukan lewat
+        `keyboard.read_hotkey()` (BUKAN event Tkinter biasa) di thread
+        terpisah — supaya SEMUA jenis tombol bisa ditangkap dengan andal,
+        termasuk F1-F12 dan kombinasi seperti Alt+X. Tombol-tombol itu
+        sering tidak nyampe sebagai <KeyPress> Tkinter biasa karena
+        Windows menganggapnya "system key" (dipakai untuk buka menu,
+        Alt+Tab, dsb — WM_SYSKEYDOWN), jadi bisa kepotong sebelum nyampe
+        widget. `keyboard` baca langsung dari level sistem jadi tidak
+        kena masalah itu, dan hasilnya (mis. "f2", "alt+x") sudah pas
+        format yang sama dipakai keyboard.add_hotkey().
+
+        Shortcut GLOBAL yang SEDANG aktif (lihat register_hotkeys) juga
+        dimatikan sementara selama capture — kalau tidak, menekan tombol
+        yang kebetulan sama dengan hotkey LAMA (mis. F2) saat memilih
+        hotkey baru akan langsung memicu aksi Terima/Tawar sungguhan.
+        Dihidupkan lagi (pakai hotkey yang masih TERSIMPAN sekarang,
+        bukan yang baru dipilih — itu baru berlaku setelah klik Simpan)
+        begitu capture selesai, baik berhasil, dibatalkan (Escape), atau
+        kotaknya kehilangan fokus (mode fallback saja, lihat bawah)."""
         if self._hotkey_capture_widget is not None:
             self._cancel_hotkey_capture()  # batalkan capture lain yg nyangkut
         self._hotkey_capture_which = which
         self._hotkey_capture_widget = widget
         widget.configure(text="Tekan tombol...", fg=ACCENT)
         widget.focus_set()
-        widget.bind("<KeyPress>", self._on_hotkey_capture_keypress)
-        widget.bind("<FocusOut>", lambda e: self._cancel_hotkey_capture())
 
         if keyboard is not None and self._hotkeys_registered:
             try:
@@ -883,7 +919,55 @@ class App(tk.Tk):
                 pass
             self._hotkeys_registered = False
 
+        if keyboard is not None:
+            token = object()
+            self._hotkey_capture_token = token
+            threading.Thread(
+                target=self._capture_hotkey_via_keyboard_lib,
+                args=(token,), daemon=True,
+            ).start()
+        else:
+            # Fallback kalau pustaka `keyboard` tidak terpasang sama
+            # sekali — tetap jalan untuk tombol biasa lewat event
+            # Tkinter, walau F1-F12/kombinasi Alt mungkin tidak selalu
+            # tertangkap (keterbatasan Tkinter, bukan bug di sini).
+            widget.bind("<KeyPress>", self._on_hotkey_capture_keypress)
+            widget.bind("<FocusOut>", lambda e: self._cancel_hotkey_capture())
+
+    def _capture_hotkey_via_keyboard_lib(self, token):
+        """Jalan di thread terpisah (blocking) — menunggu SATU kombinasi
+        tombol ditekan di mana saja, lalu kembali ke thread Tkinter lewat
+        self.after() untuk menerapkannya (Tkinter tidak boleh disentuh
+        dari luar main thread)."""
+        try:
+            combo = keyboard.read_hotkey(suppress=False)
+        except Exception:                          # noqa: BLE001
+            combo = None
+        self.after(0, lambda: self._apply_captured_hotkey(token, combo))
+
+    def _apply_captured_hotkey(self, token, combo):
+        # Capture ini sudah dibatalkan/ditimpa capture lain sebelum
+        # tombolnya sempat ditekan — abaikan hasilnya.
+        if token is not self._hotkey_capture_token:
+            return
+        widget = self._hotkey_capture_widget
+        if widget is None or not widget.winfo_exists():
+            return
+        if not combo or combo.lower() in ("esc", "escape"):
+            self._cancel_hotkey_capture()  # batal, balik ke nilai lama
+            return
+        key_name = combo.lower()
+        which = self._hotkey_capture_which
+        if which == "terima":
+            self._pending_hotkey_terima = key_name
+        else:
+            self._pending_hotkey_tawar = key_name
+        widget.configure(text=key_name.upper(), fg=TEXT)
+        self._finish_hotkey_capture()
+
     def _on_hotkey_capture_keypress(self, event):
+        """Jalur fallback (lihat _start_hotkey_capture) — dipakai HANYA
+        kalau pustaka `keyboard` tidak terpasang."""
         keysym = event.keysym
         if keysym in self.HOTKEY_MODIFIER_KEYSYMS:
             return  # modifier sendirian — terus tunggu tombol berikutnya
@@ -915,6 +999,10 @@ class App(tk.Tk):
 
     def _finish_hotkey_capture(self):
         widget = self._hotkey_capture_widget
+        # token dibatalkan duluan supaya hasil thread capture yang
+        # mungkin masih "ngambang" (menunggu tombol) diabaikan kalau
+        # baru selesai belakangan.
+        self._hotkey_capture_token = None
         widget.unbind("<KeyPress>")
         widget.unbind("<FocusOut>")
         self._hotkey_capture_widget = None
