@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.8.0"
+APP_VERSION = "1.8.1"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -1437,21 +1437,23 @@ class App(tk.Tk):
     def _build_target_tawar_row(self, sub, jenis, settings, row):
         """Baris checkbox "Target Tawar (%)" per jenis di panel Auto
         Tawar. Kalau DICENTANG, kolom persentase muncul dan harga yang
-        ditawar dihitung sebagai persentase dari Harga Client (lihat
-        compute_tawar_price_from_client di browser_actions.py). Kalau
-        TIDAK dicentang, kolom disembunyikan dan logika lama tetap
-        dipakai: harga dihitung dari potongan bracket Harga Estimasi
+        ditawar dihitung sebagai persentase dari Harga ESTIMASI (lihat
+        compute_tawar_price_from_client di browser_actions.py — nama
+        fungsinya tetap begitu karena rumusnya generik, tapi angka yang
+        dioper sekarang Harga Estimasi, bukan Harga Client). Kalau TIDAK
+        dicentang, kolom disembunyikan dan logika lama tetap dipakai:
+        harga dihitung dari potongan bracket Harga Estimasi
         (compute_tawar_price).
 
         Di bawahnya ada baris kedua, "Tawar Rentang Harga" — cuma
         relevan (dan cuma ditampilkan) kalau "Target Tawar (%)" di atas
-        aktif. Dipakai untuk job yang Harga Client-nya KECIL tapi tetap
-        mau ditawar jadi angka yang pantas: kalau dicentang dan Harga
-        Client job jatuh di antara Harga Min-Max di sini, DASAR
+        aktif. Dipakai untuk job yang Harga Estimasi-nya KECIL tapi
+        tetap mau ditawar jadi angka yang pantas: kalau dicentang dan
+        Harga Estimasi job jatuh di antara Harga Min-Max di sini, DASAR
         perhitungan persentasenya dinaikkan jadi Harga Max (bukan Harga
-        Client asli yang kecil) sebelum dikali persentase — jadi
+        Estimasi asli yang kecil) sebelum dikali persentase — jadi
         persentase >100% bisa dipakai buat memastikan hasil tawarnya
-        tetap di ATAS Harga Max itu walau Harga Client aslinya jauh di
+        tetap di ATAS Harga Max itu walau Harga Estimasi aslinya jauh di
         bawahnya. Lihat _trigger_tawar untuk penerapannya.
 
         Return baris kosong berikutnya di `sub` (dipakai pemanggil kalau
@@ -1465,7 +1467,7 @@ class App(tk.Tk):
         var = tk.BooleanVar(value=bool(settings.get("use_target_tawar")))
         self.auto_tawar_use_pct_vars[jenis] = var
         tk.Checkbutton(
-            row_frame, text="Target Tawar (%) dari Harga Client",
+            row_frame, text="Target Tawar (%) dari Harga Estimasi",
             variable=var,
             command=lambda j=jenis: self._refresh_target_tawar_field(j),
             bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
@@ -1513,7 +1515,7 @@ class App(tk.Tk):
         rmax_entry.insert(0, "" if rmax_val is None else str(rmax_val))
         rmax_entry.pack(side="left", ipady=3)
         tk.Label(range_wrap, text="Rp (dasar % jadi Harga Max ini kalau "
-                                   "Harga Client di antara rentang ini)",
+                                   "Harga Estimasi di antara rentang ini)",
                  bg=CARD, fg=MUTED, font=(FONT, 8)).pack(
             side="left", padx=(4, 0))
         self.auto_tawar_range_min_entries[jenis] = rmin_entry
@@ -2277,13 +2279,13 @@ class App(tk.Tk):
         # harganya kurang bagus buat Terima langsung tapi masih worth
         # ditawar (lihat _evaluate_auto_tawar_conditions).
         # use_target_tawar/target_tawar_pct: kalau dicentang, harga yang
-        # ditawar dihitung sebagai persentase dari Harga Client (lihat
+        # ditawar dihitung sebagai persentase dari Harga ESTIMASI (lihat
         # compute_tawar_price_from_client) bukan potongan bracket dari
         # Harga Estimasi — diatur per jenis lewat checkbox di panel.
         # use_price_range/price_range_min/price_range_max: kalau
         # "Target Tawar (%)" di atas AKTIF dan ini juga dicentang, dasar
         # perhitungan persentasenya dinaikkan jadi price_range_max kalau
-        # Harga Client job jatuh di antara price_range_min-max — lihat
+        # Harga Estimasi job jatuh di antara price_range_min-max — lihat
         # _build_target_tawar_row dan _trigger_tawar.
         parafrase_defaults = {
             "enabled": False, "target_min": 0, "target_max": 20,
@@ -2871,21 +2873,28 @@ class App(tk.Tk):
         job = self.current_job
 
         # Kalau jenis job ini punya "Target Tawar (%)" aktif (dicentang di
-        # panel Auto Tawar), harga ditawar dihitung dari % Harga Client —
-        # bukan potongan bracket Harga Estimasi seperti biasa. Berlaku
-        # juga untuk Tawar manual (F3/tombol popup), bukan cuma Auto Tawar.
+        # panel Auto Tawar), harga ditawar dihitung dari % Harga ESTIMASI
+        # (BUKAN Harga Client — sempat salah pakai Harga Client, yang
+        # bikin hasil tawarnya kekecilan untuk job dengan estimasi besar
+        # tapi harga client relatif kecil) — bukan potongan bracket
+        # Harga Estimasi seperti biasa (compute_tawar_price). Berlaku
+        # juga untuk Tawar manual (F3/tombol popup), bukan cuma Auto
+        # Tawar. Nama fungsinya (compute_tawar_price_from_client) tetap
+        # di browser_actions.py karena rumusnya generik (harga x pct%,
+        # dibulatkan ke ribuan) — cuma angka yang dioper ke sana yang
+        # berubah jadi Harga Estimasi.
         harga_tawar = None
         jenis_settings = self.auto_tawar_jenis_settings.get(job.get("jenis"), {})
         if jenis_settings.get("use_target_tawar"):
             pct = jenis_settings.get("target_tawar_pct")
-            client_raw = job.get("harga_client_raw")
-            if pct not in (None, "") and client_raw not in (None, ""):
+            estimasi_raw = job.get("harga_estimasi_raw")
+            if pct not in (None, "") and estimasi_raw not in (None, ""):
                 try:
-                    basis = float(client_raw)
-                    # "Tawar Rentang Harga": kalau Harga Client job jatuh
-                    # di antara Harga Min-Max yang diatur, DASAR
+                    basis = float(estimasi_raw)
+                    # "Tawar Rentang Harga": kalau Harga Estimasi job
+                    # jatuh di antara Harga Min-Max yang diatur, DASAR
                     # perhitungan persentase dinaikkan jadi Harga Max
-                    # (bukan Harga Client asli yang kecil) — supaya job
+                    # (bukan Harga Estimasi asli yang kecil) — supaya job
                     # murah (mis. Rp60rb) tetap bisa ditawar jadi angka
                     # yang pantas (mis. Rp100rb+) kalau persentasenya
                     # diisi >=100%, bukan cuma jadi persentase dari angka

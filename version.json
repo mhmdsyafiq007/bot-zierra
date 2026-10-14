@@ -1,6 +1,6 @@
 {
-  "version": "1.8.0",
+  "version": "1.8.1",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Tambah checkbox \"Tawar Rentang Harga\" di Auto Tawar (nested di bawah Target Tawar %): kalau Harga Client job jatuh di antara Harga Min-Max yang diisi, dasar perhitungan persennya dinaikkan jadi Harga Max — jadi job murah tetap bisa ditawar jadi angka yang pantas (persentase boleh diisi >100% buat mendorong hasilnya di atas Harga Max itu)."
+  "notes": "Perbaikan: persentase \"Target Tawar (%)\" (dan \"Tawar Rentang Harga\") sekarang dihitung dari Harga ESTIMASI, bukan Harga Client seperti sebelumnya — sebelumnya hasil tawar jadi kekecilan untuk job dengan estimasi besar tapi harga client relatif kecil. Label dan field disesuaikan jadi \"dari Harga Estimasi\"."
 }
