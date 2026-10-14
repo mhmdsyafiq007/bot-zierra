@@ -623,6 +623,11 @@ class BrowserActions:
         deadline_raw = pick(*spec["deadline"])
         service_raw = pick(*spec["service"]) if spec.get("service") else None
         word_count_raw = pick(*spec["word_count"]) if spec.get("word_count") else None
+        # Server sempat ubah "jobFile.words" jadi list (mis. ["1370"])
+        # alih-alih angka/string polos — ambil elemen pertamanya supaya
+        # tetap tampil sebagai angka biasa, bukan "['1370']".
+        if isinstance(word_count_raw, list):
+            word_count_raw = word_count_raw[0] if word_count_raw else None
 
         info["harga_client"] = (
             _format_rupiah(harga_client_raw) if harga_client_raw is not None else "-"
@@ -647,9 +652,16 @@ class BrowserActions:
         if spec.get("word_count"):
             info["word_count"] = str(word_count_raw) if word_count_raw is not None else "-"
 
-        required = [harga_client_raw, harga_estimasi_raw]
+        # Deadline & Jumlah Kata (kalau koleksinya punya field ini) kadang
+        # diisi server BELAKANGAN daripada harga client/estimasi — kalau
+        # tidak ikut disyaratkan di sini, polling berhenti duluan begitu
+        # harga sudah ada padahal deadline/jumlah kata masih kosong, dan
+        # popup keburu berhenti ter-update jadi permanen nampilkan "-".
+        required = [harga_client_raw, harga_estimasi_raw, deadline_raw]
         if spec.get("service"):
             required.append(service_raw)
+        if spec.get("word_count"):
+            required.append(word_count_raw)
         complete = all(v is not None for v in required)
 
         if harga_client_raw is None and harga_estimasi_raw is None:
