@@ -1,6 +1,6 @@
 {
-  "version": "1.7.0",
+  "version": "1.8.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Hotkey sekarang bisa F1-F12 dan kombinasi seperti Alt+X (capture dipindah ke level sistem, bukan event jendela biasa). Perbaikan bug log \"Login berhasil\" yang salah muncul tiap selesai atur hotkey. Scroll roda mouse di atas kotak Log sekarang diutamakan buat log itu sendiri dulu sampai mentok, baru lanjut scroll halaman — tidak lagi dobel scroll keduanya sekaligus."
+  "notes": "Tambah checkbox \"Tawar Rentang Harga\" di Auto Tawar (nested di bawah Target Tawar %): kalau Harga Client job jatuh di antara Harga Min-Max yang diisi, dasar perhitungan persennya dinaikkan jadi Harga Max — jadi job murah tetap bisa ditawar jadi angka yang pantas (persentase boleh diisi >100% buat mendorong hasilnya di atas Harga Max itu)."
 }

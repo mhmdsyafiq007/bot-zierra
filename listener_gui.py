@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.8.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -1441,7 +1441,23 @@ class App(tk.Tk):
         compute_tawar_price_from_client di browser_actions.py). Kalau
         TIDAK dicentang, kolom disembunyikan dan logika lama tetap
         dipakai: harga dihitung dari potongan bracket Harga Estimasi
-        (compute_tawar_price)."""
+        (compute_tawar_price).
+
+        Di bawahnya ada baris kedua, "Tawar Rentang Harga" — cuma
+        relevan (dan cuma ditampilkan) kalau "Target Tawar (%)" di atas
+        aktif. Dipakai untuk job yang Harga Client-nya KECIL tapi tetap
+        mau ditawar jadi angka yang pantas: kalau dicentang dan Harga
+        Client job jatuh di antara Harga Min-Max di sini, DASAR
+        perhitungan persentasenya dinaikkan jadi Harga Max (bukan Harga
+        Client asli yang kecil) sebelum dikali persentase — jadi
+        persentase >100% bisa dipakai buat memastikan hasil tawarnya
+        tetap di ATAS Harga Max itu walau Harga Client aslinya jauh di
+        bawahnya. Lihat _trigger_tawar untuk penerapannya.
+
+        Return baris kosong berikutnya di `sub` (dipakai pemanggil kalau
+        ada elemen lain setelahnya, mis. baris checkbox service Fix
+        File) — fungsi ini SELALU memakai 2 baris grid (row & row+1),
+        baris kedua itu cuma kosong kalau checkbox-nya tidak dicentang."""
         row_frame = tk.Frame(sub, bg=CARD)
         row_frame.grid(row=row, column=0, columnspan=6, sticky="w",
                         padx=8, pady=(10, 0))
@@ -1462,18 +1478,80 @@ class App(tk.Tk):
                          font=(FONT, 10), insertbackground=ACCENT)
         entry.insert(0, "" if pct_value is None else str(pct_value))
         entry.pack(side="left", ipady=3)
-        tk.Label(wrap, text="%", bg=CARD, fg=MUTED, font=(FONT, 8)).pack(
-            side="left", padx=(3, 0))
+        tk.Label(wrap, text="% (boleh >100)", bg=CARD, fg=MUTED,
+                 font=(FONT, 8)).pack(side="left", padx=(3, 0))
         self.auto_tawar_pct_entries[jenis] = entry
         self.auto_tawar_pct_wraps[jenis] = wrap
         if var.get():
             wrap.pack(side="left", padx=(10, 0))
 
+        # --- baris kedua: "Tawar Rentang Harga" (nested di bawah) ---
+        range_row = tk.Frame(sub, bg=CARD)
+        self.auto_tawar_range_rows[jenis] = range_row
+
+        range_var = tk.BooleanVar(value=bool(settings.get("use_price_range")))
+        self.auto_tawar_use_range_vars[jenis] = range_var
+        tk.Checkbutton(
+            range_row, text="Tawar Rentang Harga",
+            variable=range_var,
+            command=lambda j=jenis: self._refresh_price_range_field(j),
+            bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
+            activeforeground=TEXT, font=(FONT, 8), anchor="w",
+        ).pack(side="left")
+
+        range_wrap = tk.Frame(range_row, bg=CARD)
+        rmin_val = settings.get("price_range_min")
+        rmin_entry = tk.Entry(range_wrap, bg=FIELD, fg=TEXT, relief="flat",
+                              width=9, font=(FONT, 10), insertbackground=ACCENT)
+        rmin_entry.insert(0, "" if rmin_val is None else str(rmin_val))
+        rmin_entry.pack(side="left", ipady=3)
+        tk.Label(range_wrap, text="-", bg=CARD, fg=MUTED,
+                 font=(FONT, 9)).pack(side="left", padx=4)
+        rmax_val = settings.get("price_range_max")
+        rmax_entry = tk.Entry(range_wrap, bg=FIELD, fg=TEXT, relief="flat",
+                              width=9, font=(FONT, 10), insertbackground=ACCENT)
+        rmax_entry.insert(0, "" if rmax_val is None else str(rmax_val))
+        rmax_entry.pack(side="left", ipady=3)
+        tk.Label(range_wrap, text="Rp (dasar % jadi Harga Max ini kalau "
+                                   "Harga Client di antara rentang ini)",
+                 bg=CARD, fg=MUTED, font=(FONT, 8)).pack(
+            side="left", padx=(4, 0))
+        self.auto_tawar_range_min_entries[jenis] = rmin_entry
+        self.auto_tawar_range_max_entries[jenis] = rmax_entry
+        self.auto_tawar_range_wraps[jenis] = range_wrap
+        if range_var.get():
+            range_wrap.pack(side="left", padx=(10, 0))
+
+        if var.get():
+            range_row.grid(row=row + 1, column=0, columnspan=6, sticky="w",
+                           padx=8, pady=(6, 0))
+
+        return row + 2
+
     def _refresh_target_tawar_field(self, jenis):
         wrap = self.auto_tawar_pct_wraps.get(jenis)
+        range_row = self.auto_tawar_range_rows.get(jenis)
         if wrap is None:
             return
         if self.auto_tawar_use_pct_vars[jenis].get():
+            if not wrap.winfo_ismapped():
+                wrap.pack(side="left", padx=(10, 0))
+            if range_row is not None and not range_row.winfo_ismapped():
+                range_row.grid()
+        else:
+            wrap.pack_forget()
+            # "Tawar Rentang Harga" cuma relevan kalau "Target Tawar (%)"
+            # aktif — ikut disembunyikan (TIDAK dihapus centangnya,
+            # supaya kalau diaktifkan lagi, pilihan user sebelumnya
+            # masih ada).
+            if range_row is not None:
+                range_row.grid_remove()
+
+    def _refresh_price_range_field(self, jenis):
+        wrap = self.auto_tawar_range_wraps.get(jenis)
+        if wrap is None:
+            return
+        if self.auto_tawar_use_range_vars[jenis].get():
             if not wrap.winfo_ismapped():
                 wrap.pack(side="left", padx=(10, 0))
         else:
@@ -1565,6 +1643,11 @@ class App(tk.Tk):
         self.auto_tawar_use_pct_vars = {}
         self.auto_tawar_pct_entries = {}
         self.auto_tawar_pct_wraps = {}
+        self.auto_tawar_use_range_vars = {}
+        self.auto_tawar_range_min_entries = {}
+        self.auto_tawar_range_max_entries = {}
+        self.auto_tawar_range_wraps = {}
+        self.auto_tawar_range_rows = {}
 
         row_i = 0
         for jenis in self.JENIS_LIST:
@@ -1617,10 +1700,11 @@ class App(tk.Tk):
                 next_row = self._build_criteria_flow(
                     sub, field_defs, self.auto_tawar_entries[jenis], row=1)
 
-                self._build_target_tawar_row(sub, jenis, settings, row=next_row)
+                next_row = self._build_target_tawar_row(
+                    sub, jenis, settings, row=next_row)
 
                 service_row = tk.Frame(sub, bg=CARD)
-                service_row.grid(row=next_row + 1, column=0, columnspan=2, sticky="ew",
+                service_row.grid(row=next_row, column=0, columnspan=2, sticky="ew",
                                  padx=8, pady=(10, 0))
                 service_row.grid_columnconfigure(0, weight=1, uniform="svct")
                 service_row.grid_columnconfigure(1, weight=1, uniform="svct")
@@ -1709,6 +1793,19 @@ class App(tk.Tk):
                 if use_target_tawar and target_tawar_pct is None:
                     raise ValueError("Target Tawar (%) dicentang tapi kosong")
 
+                use_price_range = bool(self.auto_tawar_use_range_vars[jenis].get())
+                price_range_min = read(self.auto_tawar_range_min_entries[jenis],
+                                       allow_blank=True)
+                price_range_max = read(self.auto_tawar_range_max_entries[jenis],
+                                       allow_blank=True)
+                if use_price_range:
+                    if price_range_min is None or price_range_max is None:
+                        raise ValueError(
+                            "Tawar Rentang Harga dicentang tapi Harga Min/Max kosong")
+                    if price_range_min > price_range_max:
+                        raise ValueError(
+                            "Harga Min Rentang Harga tidak boleh lebih besar dari Max")
+
                 if jenis in ("Parafrase", "Humanizer"):
                     s = {
                         "enabled": enabled,
@@ -1719,6 +1816,9 @@ class App(tk.Tk):
                         "deadline_max_h": read(entries["deadline_max_h"]),
                         "use_target_tawar": use_target_tawar,
                         "target_tawar_pct": target_tawar_pct,
+                        "use_price_range": use_price_range,
+                        "price_range_min": price_range_min,
+                        "price_range_max": price_range_max,
                     }
                     if jenis == "Humanizer":
                         s["min_word_count"] = read(entries["min_word_count"],
@@ -1733,6 +1833,9 @@ class App(tk.Tk):
                         "deadline_max_h": read(entries["deadline_max_h"]),
                         "use_target_tawar": use_target_tawar,
                         "target_tawar_pct": target_tawar_pct,
+                        "use_price_range": use_price_range,
+                        "price_range_min": price_range_min,
+                        "price_range_max": price_range_max,
                         "service_include": [
                             svc for svc in self.FIXFILE_SERVICES
                             if self.auto_tawar_fixfile_include_vars[svc].get()
@@ -2177,22 +2280,33 @@ class App(tk.Tk):
         # ditawar dihitung sebagai persentase dari Harga Client (lihat
         # compute_tawar_price_from_client) bukan potongan bracket dari
         # Harga Estimasi — diatur per jenis lewat checkbox di panel.
+        # use_price_range/price_range_min/price_range_max: kalau
+        # "Target Tawar (%)" di atas AKTIF dan ini juga dicentang, dasar
+        # perhitungan persentasenya dinaikkan jadi price_range_max kalau
+        # Harga Client job jatuh di antara price_range_min-max — lihat
+        # _build_target_tawar_row dan _trigger_tawar.
         parafrase_defaults = {
             "enabled": False, "target_min": 0, "target_max": 20,
             "max_client_pct": 70, "deadline_min_h": 2, "deadline_max_h": 48,
             "use_target_tawar": False, "target_tawar_pct": None,
+            "use_price_range": False, "price_range_min": None,
+            "price_range_max": None,
         }
         humanizer_defaults = {
             "enabled": False, "target_min": 0, "target_max": 20,
             "max_client_pct": 70, "deadline_min_h": 2, "deadline_max_h": 48,
             "min_word_count": None, "max_word_count": 3000,
             "use_target_tawar": False, "target_tawar_pct": None,
+            "use_price_range": False, "price_range_min": None,
+            "price_range_max": None,
         }
         fixfile_defaults = {
             "enabled": False, "max_client_pct": 70,
             "deadline_min_h": 2, "deadline_max_h": 48,
             "service_include": [], "service_exclude": [],
             "use_target_tawar": False, "target_tawar_pct": None,
+            "use_price_range": False, "price_range_min": None,
+            "price_range_max": None,
         }
 
         return {
@@ -2767,7 +2881,22 @@ class App(tk.Tk):
             client_raw = job.get("harga_client_raw")
             if pct not in (None, "") and client_raw not in (None, ""):
                 try:
-                    harga_tawar = compute_tawar_price_from_client(client_raw, pct)
+                    basis = float(client_raw)
+                    # "Tawar Rentang Harga": kalau Harga Client job jatuh
+                    # di antara Harga Min-Max yang diatur, DASAR
+                    # perhitungan persentase dinaikkan jadi Harga Max
+                    # (bukan Harga Client asli yang kecil) — supaya job
+                    # murah (mis. Rp60rb) tetap bisa ditawar jadi angka
+                    # yang pantas (mis. Rp100rb+) kalau persentasenya
+                    # diisi >=100%, bukan cuma jadi persentase dari angka
+                    # kecil itu sendiri. Lihat _build_target_tawar_row.
+                    if jenis_settings.get("use_price_range"):
+                        rmin = jenis_settings.get("price_range_min")
+                        rmax = jenis_settings.get("price_range_max")
+                        if (rmin not in (None, "") and rmax not in (None, "")
+                                and float(rmin) <= basis <= float(rmax)):
+                            basis = float(rmax)
+                    harga_tawar = compute_tawar_price_from_client(basis, pct)
                 except (TypeError, ValueError):
                     harga_tawar = None
 
