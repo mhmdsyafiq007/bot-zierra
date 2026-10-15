@@ -17,6 +17,7 @@ dari screenshot DOM yang dikirim. Kalau situs berubah struktur HTML-nya,
 klik bisa gagal menemukan elemen — kirim pesan error dari log.
 """
 
+import os
 import re
 import subprocess
 import threading
@@ -43,6 +44,40 @@ ADMIN_HOME = "https://admin.kawalu.id/admin/dashboard"
 CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 USER_DATA_DIR = r"C:\ChromeAutomasi"
 DEBUG_PORT = 9222
+
+
+def find_chrome_path():
+    """Cari chrome.exe di lokasi umum + registry (App Paths), supaya tidak
+    bergantung ke satu path hardcode. Return None kalau Chrome belum
+    terpasang."""
+    candidates = [
+        CHROME_PATH,
+        os.path.join(os.environ.get("PROGRAMFILES", ""),
+                     r"Google\Chrome\Application\chrome.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", ""),
+                     r"Google\Chrome\Application\chrome.exe"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                     r"Google\Chrome\Application\chrome.exe"),
+    ]
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return path
+    try:
+        import winreg
+        for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            try:
+                with winreg.OpenKey(
+                    root,
+                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe",
+                ) as key:
+                    path = winreg.QueryValue(key, None)
+                    if path and os.path.isfile(path):
+                        return path
+            except OSError:
+                continue
+    except ImportError:
+        pass
+    return None
 
 
 def _format_rupiah(n):
@@ -193,7 +228,7 @@ class BrowserActions:
         prosesnya sudah mati total."""
         try:
             subprocess.Popen([
-                CHROME_PATH,
+                find_chrome_path() or CHROME_PATH,
                 f"--remote-debugging-port={DEBUG_PORT}",
                 f"--user-data-dir={USER_DATA_DIR}",
             ])
@@ -489,6 +524,85 @@ class BrowserActions:
                     return self.do_tawar(url, estimasi, harga_tawar, _retry=False)
                 self.log(f"[BROWSER] Gagal Tawar: {exc}", "err")
                 return False, str(exc)
+
+    # ------------------------------------------------- pasang Chrome debug
+    def setup_debug_chrome(self):
+        """Dipakai tombol "Pasang Chrome Debug". Aman ditekan berkali-kali
+        dan dari PC mana pun: (1) kalau port debug sudah hidup, TIDAK
+        membuka apa-apa (supaya Chrome debug tidak ganda); (2) kunci yang
+        sama dengan auto-relaunch (_launch_lock), jadi klik beruntun atau
+        klik saat bot sedang membuka ulang otomatis diabaikan.
+        Return (status, pesan). status: already | launched | busy |
+        no_chrome | failed."""
+        if not self._launch_lock.acquire(blocking=False):
+            return "busy", "Chrome debug sedang dipasang/dibuka, tunggu sebentar."
+        try:
+            if _debug_port_alive():
+                return "already", "Chrome debug sudah aktif — tidak perlu dipasang lagi."
+            chrome = find_chrome_path()
+            if not chrome:
+                return "no_chrome", ("Google Chrome belum terpasang di PC ini. "
+                                     "Pasang Chrome dulu, lalu coba lagi.")
+            try:
+                os.makedirs(USER_DATA_DIR, exist_ok=True)
+                subprocess.Popen([
+                    chrome,
+                    f"--remote-debugging-port={DEBUG_PORT}",
+                    f"--user-data-dir={USER_DATA_DIR}",
+                    ADMIN_HOME,
+                ])
+            except Exception as exc:              # noqa: BLE001
+                return "failed", f"Gagal membuka Chrome debug: {exc}"
+            for _ in range(24):                   # tunggu port hidup (<=12 dtk)
+                time.sleep(0.5)
+                if _debug_port_alive():
+                    return "launched", ("Chrome debug terpasang & terbuka — "
+                                        "silakan login di jendela tersebut.")
+            return "failed", ("Chrome dibuka tapi port debug belum merespons. "
+                              "Tutup semua jendela Chrome profil otomasi "
+                              "lalu coba lagi.")
+        finally:
+            self._launch_lock.release()
+
+    def create_desktop_shortcut(self):
+        """Buat shortcut "Chrome Debug" di Desktop (target Chrome + flag
+        debug). Tidak menimpa/menduplikasi kalau shortcut itu sudah ada.
+        Return (status, pesan). status: created | exists | no_chrome |
+        failed."""
+        chrome = find_chrome_path()
+        if not chrome:
+            return "no_chrome", ("Google Chrome belum terpasang di PC ini, "
+                                 "shortcut belum bisa dibuat.")
+        script = (
+            "$d=[Environment]::GetFolderPath('Desktop');"
+            "$p=Join-Path $d 'Chrome Debug.lnk';"
+            "if(Test-Path $p){'EXISTS';exit};"
+            "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($p);"
+            "$s.TargetPath=$env:CD_CHROME;"
+            "$s.Arguments=$env:CD_ARGS;"
+            "$s.WorkingDirectory=Split-Path $env:CD_CHROME;"
+            "$s.IconLocation=$env:CD_CHROME+',0';"
+            "$s.Save();'CREATED'"
+        )
+        env = dict(os.environ)
+        env["CD_CHROME"] = chrome
+        env["CD_ARGS"] = (f'--remote-debugging-port={DEBUG_PORT} '
+                          f'--user-data-dir="{USER_DATA_DIR}"')
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive",
+                 "-ExecutionPolicy", "Bypass", "-Command", script],
+                capture_output=True, text=True, timeout=20, env=env,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except Exception as exc:                  # noqa: BLE001
+            return "failed", f"Gagal membuat shortcut: {exc}"
+        result = (out.stdout or "").strip()
+        if "EXISTS" in result:
+            return "exists", 'Shortcut "Chrome Debug" sudah ada di Desktop.'
+        if "CREATED" in result:
+            return "created", 'Shortcut "Chrome Debug" dibuat di Desktop.'
+        return "failed", f"Gagal membuat shortcut: {(out.stderr or result)[:200]}"
 
     # ------------------------------------------------------------ jalur API
     # Ref job diambil dari teks pesan Telegram ("Ref: ..."). Token dibaca

@@ -1,6 +1,6 @@
 {
-  "version": "1.8.2",
+  "version": "1.9.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan: Jumlah Kata dan Deadline di popup job Humanizer kadang tidak tampil (jadi \"-\") karena server mengisi field ini belakangan setelah Harga Client/Estimasi — sekarang bot menunggu field tersebut benar-benar terisi sebelum berhenti memuat ulang ringkasan job. Juga menangani kasus \"Jumlah Kata\" dikirim server sebagai list (mis. [\"1370\"]) alih-alih angka biasa."
+  "notes": "Fitur baru: tombol \"Pasang / Buka\" Chrome Debug dan \"Shortcut Desktop\" di panel utama. Kalau Chrome debug belum aktif, satu klik membuka Chrome dengan profil otomasi; kalau sudah aktif, tombol tidak membuka yang kedua (anti ganda, juga aman diklik berulang). Shortcut \"Chrome Debug\" dibuat di Desktop tanpa menimpa yang sudah ada. Lokasi Chrome sekarang dicari otomatis (tidak lagi terpaku satu path)."
 }

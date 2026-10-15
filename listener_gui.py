@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.8.2"
+APP_VERSION = "1.9.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -854,6 +854,20 @@ class App(tk.Tk):
                      height=30, fill=ACCENT, bg=CARD).grid(
             row=1, column=2, sticky="w", padx=(14, 0))
 
+        tk.Label(settings_row, text="CHROME DEBUG", bg=CARD, fg=MUTED,
+                 font=(FONT, 7, "bold")).grid(row=0, column=3, sticky="w",
+                                              padx=(24, 0))
+        chrome_btns = tk.Frame(settings_row, bg=CARD)
+        chrome_btns.grid(row=1, column=3, sticky="w", padx=(24, 0))
+        self.btn_chrome_setup = RoundedButton(
+            chrome_btns, "Pasang / Buka", self.on_setup_chrome_debug,
+            width=120, height=30, fill=GREEN, bg=CARD)
+        self.btn_chrome_setup.pack(side="left")
+        self.btn_chrome_shortcut = RoundedButton(
+            chrome_btns, "Shortcut Desktop", self.on_make_chrome_shortcut,
+            width=130, height=30, fill=ACCENT, bg=CARD)
+        self.btn_chrome_shortcut.pack(side="left", padx=(8, 0))
+
         self._build_volume_panel()
         self._build_auto_terima_panel()
         self._build_auto_tawar_panel()
@@ -862,6 +876,39 @@ class App(tk.Tk):
         self.refresh_buttons()
         self.footer.config(text="Menunggu pesan berlabel *MASUK*")
         self.log("Login berhasil. Tekan Start untuk mulai memantau.", "sys")
+
+    # ------------------------------------------------ pasang Chrome debug
+    def _run_chrome_task(self, button, fn, busy_text, idle_text):
+        """Jalankan fn di thread; tombol dikunci selama berjalan supaya
+        klik berulang tidak menumpuk (kunci kedua ada di browser_actions:
+        port sudah hidup -> tidak membuka lagi)."""
+        if not button.enabled:
+            return
+        button.set_enabled(False)
+        button.set_text(busy_text)
+
+        def work():
+            try:
+                status, msg = fn()
+            except Exception as exc:              # noqa: BLE001
+                status, msg = "failed", str(exc)
+            tag = "hit" if status in ("launched", "created") else (
+                "sys" if status in ("already", "exists", "busy") else "err")
+            self.ui(self.log, f"[CHROME] {msg}", tag)
+            self.ui(button.set_text, idle_text)
+            self.ui(button.set_enabled, True)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_setup_chrome_debug(self):
+        self._run_chrome_task(self.btn_chrome_setup,
+                              self.browser.setup_debug_chrome,
+                              "Memproses...", "Pasang / Buka")
+
+    def on_make_chrome_shortcut(self):
+        self._run_chrome_task(self.btn_chrome_shortcut,
+                              self.browser.create_desktop_shortcut,
+                              "Membuat...", "Shortcut Desktop")
 
     # Tombol modifier yang diabaikan kalau ditekan sendirian saat capture
     # (bukan hotkey yang valid tanpa tombol lain) — tunggu tombol berikutnya.
