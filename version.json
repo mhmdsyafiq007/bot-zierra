@@ -1,6 +1,6 @@
 {
-  "version": "1.9.0",
+  "version": "1.9.1",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Fitur baru: tombol \"Pasang / Buka\" Chrome Debug dan \"Shortcut Desktop\" di panel utama. Kalau Chrome debug belum aktif, satu klik membuka Chrome dengan profil otomasi; kalau sudah aktif, tombol tidak membuka yang kedua (anti ganda, juga aman diklik berulang). Shortcut \"Chrome Debug\" dibuat di Desktop tanpa menimpa yang sudah ada. Lokasi Chrome sekarang dicari otomatis (tidak lagi terpaku satu path)."
+  "notes": "Tampilan: tombol \"Pasang / Buka\" Chrome Debug dan \"Shortcut Desktop\" dipindah ke baris paling bawah (di bawah Catatan Hari Ini) supaya area atas tidak penuh."
 }

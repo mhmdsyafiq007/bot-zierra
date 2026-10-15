@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.9.0"
+APP_VERSION = "1.9.1"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -722,6 +722,7 @@ class App(tk.Tk):
         self.body.grid_rowconfigure(6, weight=0)
         self.body.grid_rowconfigure(7, weight=0)
         self.body.grid_rowconfigure(8, weight=0)
+        self.body.grid_rowconfigure(9, weight=0)
         self.body.grid_columnconfigure(0, weight=1)
 
         top = tk.Frame(self.body, bg=CARD)
@@ -854,24 +855,11 @@ class App(tk.Tk):
                      height=30, fill=ACCENT, bg=CARD).grid(
             row=1, column=2, sticky="w", padx=(14, 0))
 
-        tk.Label(settings_row, text="CHROME DEBUG", bg=CARD, fg=MUTED,
-                 font=(FONT, 7, "bold")).grid(row=0, column=3, sticky="w",
-                                              padx=(24, 0))
-        chrome_btns = tk.Frame(settings_row, bg=CARD)
-        chrome_btns.grid(row=1, column=3, sticky="w", padx=(24, 0))
-        self.btn_chrome_setup = RoundedButton(
-            chrome_btns, "Pasang / Buka", self.on_setup_chrome_debug,
-            width=120, height=30, fill=GREEN, bg=CARD)
-        self.btn_chrome_setup.pack(side="left")
-        self.btn_chrome_shortcut = RoundedButton(
-            chrome_btns, "Shortcut Desktop", self.on_make_chrome_shortcut,
-            width=130, height=30, fill=ACCENT, bg=CARD)
-        self.btn_chrome_shortcut.pack(side="left", padx=(8, 0))
-
         self._build_volume_panel()
         self._build_auto_terima_panel()
         self._build_auto_tawar_panel()
         self._build_notes_row()
+        self._build_chrome_row()
 
         self.refresh_buttons()
         self.footer.config(text="Menunggu pesan berlabel *MASUK*")
@@ -1916,6 +1904,24 @@ class App(tk.Tk):
             row, self._notes_button_text(), self.show_notes_popup,
             width=220, height=34, fill=ACCENT_SOFT, bg=CARD, subtle=True)
         self.btn_notes.pack(side="left")
+
+    def _build_chrome_row(self):
+        """Tombol pasang Chrome debug + shortcut Desktop, paling bawah
+        supaya tidak menumpuk di area atas."""
+        row = tk.Frame(self.body, bg=CARD)
+        row.grid(row=9, column=0, sticky="ew", pady=(14, 0))
+        tk.Label(row, text="CHROME DEBUG", bg=CARD, fg=MUTED,
+                 font=(FONT, 7, "bold")).pack(anchor="w")
+        btns = tk.Frame(row, bg=CARD)
+        btns.pack(anchor="w", pady=(3, 0))
+        self.btn_chrome_setup = RoundedButton(
+            btns, "Pasang / Buka", self.on_setup_chrome_debug,
+            width=130, height=34, fill=GREEN, bg=CARD)
+        self.btn_chrome_setup.pack(side="left")
+        self.btn_chrome_shortcut = RoundedButton(
+            btns, "Shortcut Desktop", self.on_make_chrome_shortcut,
+            width=150, height=34, fill=ACCENT, bg=CARD)
+        self.btn_chrome_shortcut.pack(side="left", padx=(8, 0))
 
     def _notes_button_text(self):
         return f"Catatan Hari Ini ({len(self.job_notes_list)})"
