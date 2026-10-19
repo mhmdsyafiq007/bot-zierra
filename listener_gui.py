@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.9.1"
+APP_VERSION = "1.10.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -1549,8 +1549,7 @@ class App(tk.Tk):
                               width=9, font=(FONT, 10), insertbackground=ACCENT)
         rmax_entry.insert(0, "" if rmax_val is None else str(rmax_val))
         rmax_entry.pack(side="left", ipady=3)
-        tk.Label(range_wrap, text="Rp (dasar % jadi Harga Max ini kalau "
-                                   "Harga Estimasi di antara rentang ini)",
+        tk.Label(range_wrap, text="Rp (dasar % = Harga Max)",
                  bg=CARD, fg=MUTED, font=(FONT, 8)).pack(
             side="left", padx=(4, 0))
         self.auto_tawar_range_min_entries[jenis] = rmin_entry
@@ -1559,40 +1558,69 @@ class App(tk.Tk):
         if range_var.get():
             range_wrap.pack(side="left", padx=(10, 0))
 
-        if var.get():
-            range_row.grid(row=row + 1, column=0, columnspan=6, sticky="w",
-                           padx=8, pady=(6, 0))
+        # --- baris ketiga: perilaku DI LUAR rentang (nested di bawah) ---
+        outside_row = tk.Frame(sub, bg=CARD)
+        self.auto_tawar_outside_rows[jenis] = outside_row
+        outside_var = tk.BooleanVar(
+            value=bool(settings.get("outside_range_default")))
+        self.auto_tawar_outside_vars[jenis] = outside_var
+        tk.Checkbutton(
+            outside_row,
+            text="Di luar rentang: tawar default (di bawah Harga Estimasi)",
+            variable=outside_var,
+            bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
+            activeforeground=TEXT, font=(FONT, 8), anchor="w",
+        ).pack(side="left")
 
-        return row + 2
+        self.auto_tawar_row_index[jenis] = row
+        self._refresh_tawar_rows(jenis)
 
-    def _refresh_target_tawar_field(self, jenis):
+        return row + 3
+
+    def _refresh_tawar_rows(self, jenis):
+        """Atur tampil/sembunyi tiga lapis checkbox Tawar per jenis:
+        kolom persentase (kalau "Target Tawar (%)" dicentang), baris
+        "Tawar Rentang Harga" (cuma kalau persentase aktif), dan baris
+        "Di luar rentang: tawar default" (cuma kalau rentang harga aktif
+        juga). Centang yang disembunyikan TIDAK dihapus, supaya pilihan
+        user tetap ada kalau diaktifkan lagi."""
         wrap = self.auto_tawar_pct_wraps.get(jenis)
         range_row = self.auto_tawar_range_rows.get(jenis)
-        if wrap is None:
+        range_wrap = self.auto_tawar_range_wraps.get(jenis)
+        outside_row = self.auto_tawar_outside_rows.get(jenis)
+        base = self.auto_tawar_row_index.get(jenis)
+        if None in (wrap, range_row, range_wrap, outside_row, base):
             return
-        if self.auto_tawar_use_pct_vars[jenis].get():
-            if not wrap.winfo_ismapped():
-                wrap.pack(side="left", padx=(10, 0))
-            if range_row is not None and not range_row.winfo_ismapped():
-                range_row.grid()
+        pct_on = bool(self.auto_tawar_use_pct_vars[jenis].get())
+        range_on = bool(self.auto_tawar_use_range_vars[jenis].get())
+
+        if pct_on:
+            wrap.pack(side="left", padx=(10, 0))
         else:
             wrap.pack_forget()
-            # "Tawar Rentang Harga" cuma relevan kalau "Target Tawar (%)"
-            # aktif — ikut disembunyikan (TIDAK dihapus centangnya,
-            # supaya kalau diaktifkan lagi, pilihan user sebelumnya
-            # masih ada).
-            if range_row is not None:
-                range_row.grid_remove()
+
+        if range_on:
+            range_wrap.pack(side="left", padx=(10, 0))
+        else:
+            range_wrap.pack_forget()
+
+        if pct_on:
+            range_row.grid(row=base + 1, column=0, columnspan=6, sticky="w",
+                           padx=8, pady=(6, 0))
+        else:
+            range_row.grid_remove()
+
+        if pct_on and range_on:
+            outside_row.grid(row=base + 2, column=0, columnspan=6, sticky="w",
+                             padx=8, pady=(4, 0))
+        else:
+            outside_row.grid_remove()
+
+    def _refresh_target_tawar_field(self, jenis):
+        self._refresh_tawar_rows(jenis)
 
     def _refresh_price_range_field(self, jenis):
-        wrap = self.auto_tawar_range_wraps.get(jenis)
-        if wrap is None:
-            return
-        if self.auto_tawar_use_range_vars[jenis].get():
-            if not wrap.winfo_ismapped():
-                wrap.pack(side="left", padx=(10, 0))
-        else:
-            wrap.pack_forget()
+        self._refresh_tawar_rows(jenis)
 
     # ------------------------------------------------------ Auto Tawar
     # Fitur TERPISAH dari Auto Terima di atas — panel, syarat per jenis,
@@ -1685,6 +1713,9 @@ class App(tk.Tk):
         self.auto_tawar_range_max_entries = {}
         self.auto_tawar_range_wraps = {}
         self.auto_tawar_range_rows = {}
+        self.auto_tawar_outside_vars = {}
+        self.auto_tawar_outside_rows = {}
+        self.auto_tawar_row_index = {}
 
         row_i = 0
         for jenis in self.JENIS_LIST:
@@ -1835,6 +1866,8 @@ class App(tk.Tk):
                                        allow_blank=True)
                 price_range_max = read(self.auto_tawar_range_max_entries[jenis],
                                        allow_blank=True)
+                outside_range_default = bool(
+                    self.auto_tawar_outside_vars[jenis].get())
                 if use_price_range:
                     if price_range_min is None or price_range_max is None:
                         raise ValueError(
@@ -1856,6 +1889,7 @@ class App(tk.Tk):
                         "use_price_range": use_price_range,
                         "price_range_min": price_range_min,
                         "price_range_max": price_range_max,
+                        "outside_range_default": outside_range_default,
                     }
                     if jenis == "Humanizer":
                         s["min_word_count"] = read(entries["min_word_count"],
@@ -1873,6 +1907,7 @@ class App(tk.Tk):
                         "use_price_range": use_price_range,
                         "price_range_min": price_range_min,
                         "price_range_max": price_range_max,
+                        "outside_range_default": outside_range_default,
                         "service_include": [
                             svc for svc in self.FIXFILE_SERVICES
                             if self.auto_tawar_fixfile_include_vars[svc].get()
@@ -2340,12 +2375,16 @@ class App(tk.Tk):
         # perhitungan persentasenya dinaikkan jadi price_range_max kalau
         # Harga Estimasi job jatuh di antara price_range_min-max — lihat
         # _build_target_tawar_row dan _trigger_tawar.
+        # outside_range_default: kalau rentang harga aktif dan dicentang,
+        # job yang Harga Estimasi-nya DI LUAR rentang memakai logika tawar
+        # default (bracket di bawah Harga Estimasi), BUKAN persentase —
+        # jadi persentase >100% cuma berlaku untuk job dalam rentang.
         parafrase_defaults = {
             "enabled": False, "target_min": 0, "target_max": 20,
             "max_client_pct": 70, "deadline_min_h": 2, "deadline_max_h": 48,
             "use_target_tawar": False, "target_tawar_pct": None,
             "use_price_range": False, "price_range_min": None,
-            "price_range_max": None,
+            "price_range_max": None, "outside_range_default": False,
         }
         humanizer_defaults = {
             "enabled": False, "target_min": 0, "target_max": 20,
@@ -2353,7 +2392,7 @@ class App(tk.Tk):
             "min_word_count": None, "max_word_count": 3000,
             "use_target_tawar": False, "target_tawar_pct": None,
             "use_price_range": False, "price_range_min": None,
-            "price_range_max": None,
+            "price_range_max": None, "outside_range_default": False,
         }
         fixfile_defaults = {
             "enabled": False, "max_client_pct": 70,
@@ -2361,7 +2400,7 @@ class App(tk.Tk):
             "service_include": [], "service_exclude": [],
             "use_target_tawar": False, "target_tawar_pct": None,
             "use_price_range": False, "price_range_min": None,
-            "price_range_max": None,
+            "price_range_max": None, "outside_range_default": False,
         }
 
         return {
@@ -2943,22 +2982,36 @@ class App(tk.Tk):
             estimasi_raw = job.get("harga_estimasi_raw")
             if pct not in (None, "") and estimasi_raw not in (None, ""):
                 try:
-                    basis = float(estimasi_raw)
-                    # "Tawar Rentang Harga": kalau Harga Estimasi job
-                    # jatuh di antara Harga Min-Max yang diatur, DASAR
-                    # perhitungan persentase dinaikkan jadi Harga Max
-                    # (bukan Harga Estimasi asli yang kecil) — supaya job
-                    # murah (mis. Rp60rb) tetap bisa ditawar jadi angka
-                    # yang pantas (mis. Rp100rb+) kalau persentasenya
-                    # diisi >=100%, bukan cuma jadi persentase dari angka
-                    # kecil itu sendiri. Lihat _build_target_tawar_row.
-                    if jenis_settings.get("use_price_range"):
-                        rmin = jenis_settings.get("price_range_min")
-                        rmax = jenis_settings.get("price_range_max")
-                        if (rmin not in (None, "") and rmax not in (None, "")
-                                and float(rmin) <= basis <= float(rmax)):
-                            basis = float(rmax)
-                    harga_tawar = compute_tawar_price_from_client(basis, pct)
+                    estimasi = float(estimasi_raw)
+                    # "Tawar Rentang Harga" — dicek terhadap Harga
+                    # ESTIMASI. Di DALAM rentang: dasar persentase
+                    # dinaikkan jadi Harga Max (jadi persentase >100%
+                    # menjamin tawar di atas Harga Max). Di LUAR rentang
+                    # dan "Di luar rentang: tawar default" dicentang:
+                    # harga_tawar dibiarkan None -> do_tawar memakai
+                    # logika default (bracket di bawah Harga Estimasi),
+                    # sehingga persentase >100% tidak ikut berlaku.
+                    rmin = jenis_settings.get("price_range_min")
+                    rmax = jenis_settings.get("price_range_max")
+                    use_range = (jenis_settings.get("use_price_range")
+                                 and rmin not in (None, "")
+                                 and rmax not in (None, ""))
+                    if use_range and float(rmin) <= estimasi <= float(rmax):
+                        harga_tawar = compute_tawar_price_from_client(
+                            float(rmax), pct)
+                        self._safe_log(
+                            f"[TAWAR] Estimasi Rp{int(estimasi)} di dalam "
+                            f"rentang — dasar Rp{int(float(rmax))} x {pct}%",
+                            "sys")
+                    elif use_range and jenis_settings.get("outside_range_default"):
+                        harga_tawar = None
+                        self._safe_log(
+                            f"[TAWAR] Estimasi Rp{int(estimasi)} di luar "
+                            "rentang — pakai tawar default (di bawah "
+                            "Harga Estimasi)", "sys")
+                    else:
+                        harga_tawar = compute_tawar_price_from_client(
+                            estimasi, pct)
                 except (TypeError, ValueError):
                     harga_tawar = None
 
