@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.11.0"
+APP_VERSION = "1.11.2"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -638,14 +638,78 @@ class App(tk.Tk):
             lambda: webbrowser.open("https://my.telegram.org/apps"),
             width=250, height=34, fill=ACCENT_SOFT, bg=CARD, subtle=True,
         ).pack(anchor="w", pady=(0, 6))
-        tk.Label(
-            self.body,
-            text="Langkah: login dengan nomor HP Telegram -> API development "
-                 "tools -> isi App title & Short name (bebas) -> salin "
-                 "api_id & api_hash ke kolom di bawah.",
-            bg=CARD, fg=MUTED, font=(FONT, 8), justify="left",
-            wraplength=300, anchor="w",
-        ).pack(anchor="w", pady=(0, 12))
+        # Tutorial bisa dilipat. Terbuka otomatis kalau API ID/Hash belum
+        # pernah disimpan (pemakaian pertama), tertutup kalau sudah ada.
+        guide_open = {"v": not bool(self.load_config())}
+        toggle = tk.Label(self.body, bg=CARD, fg=ACCENT, cursor="hand2",
+                          font=(FONT, 8, "bold"), anchor="w")
+        toggle.pack(anchor="w", pady=(0, 4))
+        holder = tk.Frame(self.body, bg=CARD)
+        holder.pack(fill="x")
+        guide = tk.Frame(holder, bg=CARD)
+
+        def _apply_guide():
+            if guide_open["v"]:
+                guide.pack(fill="x", pady=(0, 12))
+                toggle.config(text="\u25BE Sembunyikan tutorial API ID & Hash")
+            else:
+                guide.pack_forget()
+                toggle.config(text="\u25B8 Tampilkan tutorial API ID & Hash")
+
+        def _toggle_guide(_=None):
+            guide_open["v"] = not guide_open["v"]
+            _apply_guide()
+
+        toggle.bind("<Button-1>", _toggle_guide)
+        tk.Label(guide, text="CARA MENDAPATKAN API ID & API HASH", bg=CARD,
+                 fg=MUTED, font=(FONT, 7, "bold"), anchor="w").pack(anchor="w")
+        steps = [
+            ("1.", "Klik tombol di atas (membuka my.telegram.org/apps), "
+                   "masukkan nomor HP Telegram dengan kode negara, "
+                   "mis. +628123456789, lalu klik Next."),
+            ("2.", "Telegram di HP/PC mengirim kode login ke chat "
+                   "\"Telegram\". Masukkan kode itu di halaman web, "
+                   "lalu Sign In."),
+            ("3.", "Klik \"API development tools\"."),
+            ("4.", "Isi form: App title (bebas, mis. MyBot), Short name "
+                   "(bebas, 5-32 huruf/angka, mis. mybot123), Platform: "
+                   "Desktop. Kolom lain boleh dikosongkan. Klik Create "
+                   "application."),
+            ("5.", "Di halaman \"App configuration\" hanya dua nilai ini "
+                   "yang disalin:"),
+        ]
+        for num, text in steps:
+            line = tk.Frame(guide, bg=CARD)
+            line.pack(fill="x", anchor="w", pady=(3, 0))
+            tk.Label(line, text=num, bg=CARD, fg=ACCENT,
+                     font=(FONT, 8, "bold"), width=2, anchor="ne").pack(
+                side="left", anchor="n")
+            tk.Label(line, text=text, bg=CARD, fg=TEXT, font=(FONT, 8),
+                     justify="left", wraplength=290, anchor="w").pack(
+                side="left", anchor="n")
+        copy_box = tk.Frame(guide, bg=FIELD)
+        copy_box.pack(fill="x", pady=(6, 0))
+        tk.Label(copy_box,
+                 text="App api_id  (angka, mis. 1234567)\n"
+                      "   -> tempel ke kolom API ID",
+                 bg=FIELD, fg=GREEN, font=(FONT, 8, "bold"),
+                 justify="left", anchor="w").pack(
+            anchor="w", padx=8, pady=(6, 2))
+        tk.Label(copy_box,
+                 text="App api_hash  (32 huruf & angka)\n"
+                      "   -> tempel ke kolom API Hash",
+                 bg=FIELD, fg=GREEN, font=(FONT, 8, "bold"),
+                 justify="left", anchor="w").pack(
+            anchor="w", padx=8, pady=(2, 6))
+        tk.Label(guide,
+                 text="Jangan salin Public keys / Production configuration "
+                      "dan jangan bagikan api_hash ke siapa pun. Kalau muncul "
+                      "tulisan ERROR, matikan VPN lalu coba lagi beberapa "
+                      "saat kemudian.",
+                 bg=CARD, fg=MUTED, font=(FONT, 8), justify="left",
+                 wraplength=300, anchor="w").pack(anchor="w", pady=(6, 0))
+
+        _apply_guide()
 
         self.f_api_id = Field(self.body, "API ID")
         self.f_api_id.pack(fill="x", pady=(0, 14))
