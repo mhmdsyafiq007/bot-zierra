@@ -1,6 +1,6 @@
 {
-  "version": "1.11.2",
+  "version": "1.11.3",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Login: tutorial lengkap cara mendapatkan API ID & API Hash (5 langkah) kini tampil di layar login, beserta penjelasan nilai mana yang disalin: \"App api_id\" ke kolom API ID dan \"App api_hash\" ke kolom API Hash. Tutorial otomatis terbuka saat pertama kali pakai dan bisa disembunyikan/ditampilkan lagi."
+  "notes": "Perbaikan layar login: saat tutorial API ID & Hash ditutup, kolom di bawahnya sekarang ikut naik (sebelumnya tertinggal jauh karena sisa tinggi tutorial). Tutorial sekarang default tertutup, bisa dibuka lewat tautan \"Tampilkan tutorial API ID & Hash\"."
 }

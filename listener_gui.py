@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.11.2"
+APP_VERSION = "1.11.3"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -638,19 +638,19 @@ class App(tk.Tk):
             lambda: webbrowser.open("https://my.telegram.org/apps"),
             width=250, height=34, fill=ACCENT_SOFT, bg=CARD, subtle=True,
         ).pack(anchor="w", pady=(0, 6))
-        # Tutorial bisa dilipat. Terbuka otomatis kalau API ID/Hash belum
-        # pernah disimpan (pemakaian pertama), tertutup kalau sudah ada.
-        guide_open = {"v": not bool(self.load_config())}
+        # Tutorial bisa dilipat, default TERTUTUP. guide langsung di-pack
+        # "after=toggle" (tanpa frame pembungkus) — frame pembungkus kosong
+        # tetap mempertahankan tinggi lama di Tk setelah isinya dilepas,
+        # yang bikin field di bawahnya berjarak jauh saat tutorial ditutup.
+        guide_open = {"v": False}
         toggle = tk.Label(self.body, bg=CARD, fg=ACCENT, cursor="hand2",
                           font=(FONT, 8, "bold"), anchor="w")
-        toggle.pack(anchor="w", pady=(0, 4))
-        holder = tk.Frame(self.body, bg=CARD)
-        holder.pack(fill="x")
-        guide = tk.Frame(holder, bg=CARD)
+        toggle.pack(anchor="w", pady=(0, 8))
+        guide = tk.Frame(self.body, bg=CARD)
 
         def _apply_guide():
             if guide_open["v"]:
-                guide.pack(fill="x", pady=(0, 12))
+                guide.pack(fill="x", pady=(0, 12), after=toggle)
                 toggle.config(text="\u25BE Sembunyikan tutorial API ID & Hash")
             else:
                 guide.pack_forget()
