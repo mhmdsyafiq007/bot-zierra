@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.10.0"
+APP_VERSION = "1.11.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -627,6 +627,25 @@ class App(tk.Tk):
         self.step_dots(0)
         self.add_hint("Ambil API ID dan API Hash di my.telegram.org, lalu tempel "
                       "di bawah. Hanya untuk pertama kali.")
+
+        # Belum punya API ID/Hash? Tombol ini membuka halaman pendaftaran
+        # resmi Telegram (login pakai nomor HP -> "API development tools"
+        # -> isi App title & Short name -> API ID & API Hash muncul).
+        # Pendaftarannya sendiri tidak bisa diotomatisasi (butuh kode OTP
+        # dari Telegram), jadi bot cukup membukakan halamannya.
+        RoundedButton(
+            self.body, "Daftar & Ambil API ID / Hash",
+            lambda: webbrowser.open("https://my.telegram.org/apps"),
+            width=250, height=34, fill=ACCENT_SOFT, bg=CARD, subtle=True,
+        ).pack(anchor="w", pady=(0, 6))
+        tk.Label(
+            self.body,
+            text="Langkah: login dengan nomor HP Telegram -> API development "
+                 "tools -> isi App title & Short name (bebas) -> salin "
+                 "api_id & api_hash ke kolom di bawah.",
+            bg=CARD, fg=MUTED, font=(FONT, 8), justify="left",
+            wraplength=300, anchor="w",
+        ).pack(anchor="w", pady=(0, 12))
 
         self.f_api_id = Field(self.body, "API ID")
         self.f_api_id.pack(fill="x", pady=(0, 14))

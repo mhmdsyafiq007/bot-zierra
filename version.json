@@ -1,6 +1,6 @@
 {
-  "version": "1.10.0",
+  "version": "1.11.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Auto Tawar: ditambah checkbox \"Di luar rentang: tawar default (di bawah Harga Estimasi)\" di bawah Tawar Rentang Harga. Kalau dicentang, persentase (termasuk >100%) hanya berlaku saat Harga Estimasi berada di dalam rentang; di luar rentang bot memakai logika tawar default. Rentang selalu dicek ke Harga Estimasi, dan log mencatat logika mana yang dipakai. Juga merapikan teks keterangan rentang yang terpotong."
+  "notes": "Login: ditambah tombol \"Daftar & Ambil API ID / Hash\" di atas kolom API ID yang langsung membuka my.telegram.org/apps, lengkap dengan petunjuk singkat langkah mendapatkan API ID dan API Hash."
 }
