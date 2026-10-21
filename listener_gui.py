@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.11.3"
+APP_VERSION = "1.12.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -253,6 +253,99 @@ class Field(tk.Frame):
 
     def focus(self):
         self.entry.focus_set()
+
+
+TIP_AUTO_TERIMA = (
+    "Kalau aktif, job yang masuk dan memenuhi syarat di bawah langsung "
+    "di-Terima otomatis setelah jeda acak (Delay). Auto Terima dicek lebih "
+    "dulu daripada Auto Tawar, dan satu job hanya memicu satu aksi otomatis."
+)
+TIP_AUTO_TAWAR = (
+    "Kalau aktif, job yang tidak ter-Terima otomatis tetapi memenuhi syarat "
+    "Auto Tawar di bawah akan ditawar otomatis setelah jeda acak (Delay)."
+)
+TIP_TARGET_TAWAR = (
+    "Harga tawar dihitung sebagai persentase dari Harga Estimasi (boleh "
+    "lebih dari 100%), lalu dibulatkan ke bawah ke ribuan. Kalau tidak "
+    "dicentang, bot memakai tawar default: sedikit di bawah Harga Estimasi."
+)
+TIP_RANGE = (
+    "Kalau Harga Estimasi job berada di antara Harga Min dan Max, dasar "
+    "persentase dinaikkan menjadi Harga Max. Jadi persentase di atas 100% "
+    "menjamin tawar di atas Harga Max. Contoh: rentang 60.000-100.000, "
+    "estimasi 67.000, persentase 120% -> 100.000 x 120% = 120.000."
+)
+TIP_OUTSIDE = (
+    "Kalau Harga Estimasi job di luar rentang, bot memakai tawar default "
+    "(sedikit di bawah Harga Estimasi), bukan persentase. Jadi persentase "
+    "di atas 100% hanya berlaku untuk job di dalam rentang. Kalau tidak "
+    "dicentang, di luar rentang tetap memakai persentase biasa."
+)
+
+
+def tip_jenis(aksi, jenis):
+    return (f"Aktifkan {aksi} untuk job {jenis}. Syarat khusus {jenis} "
+            f"diatur di panel {jenis.upper()} di bawah.")
+
+
+
+class InfoTip(tk.Canvas):
+    """Tanda seru kecil; penjelasan muncul saat kursor diarahkan ke
+    atasnya (tanpa klik) dan hilang saat kursor pergi."""
+
+    SIZE = 16
+
+    def __init__(self, parent, text):
+        bg = parent["bg"]
+        super().__init__(parent, width=self.SIZE, height=self.SIZE, bg=bg,
+                         highlightthickness=0, bd=0, cursor="question_arrow")
+        self.text = text
+        self.tip = None
+        self.circle = self.create_oval(1, 1, self.SIZE - 1, self.SIZE - 1,
+                                       outline=ACCENT, fill=bg, width=1)
+        self.create_text(self.SIZE / 2, self.SIZE / 2 + 0.5, text="!",
+                         fill=ACCENT, font=(FONT, 8, "bold"))
+        self.bind("<Enter>", self._show)
+        self.bind("<Leave>", self._hide)
+        self.bind("<Destroy>", self._hide)
+
+    def _show(self, event=None):
+        self.itemconfig(self.circle, fill=ACCENT_SOFT)
+        if self.tip is not None:
+            return
+        tip = tk.Toplevel(self)
+        tip.wm_overrideredirect(True)
+        try:
+            tip.wm_attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        box = tk.Frame(tip, bg=ACCENT, padx=1, pady=1)
+        box.pack()
+        tk.Label(box, text=self.text, bg=FIELD, fg=TEXT, font=(FONT, 8),
+                 justify="left", wraplength=290, padx=10, pady=8).pack()
+        tip.update_idletasks()
+        w, h = tip.winfo_reqwidth(), tip.winfo_reqheight()
+        x = self.winfo_rootx() + self.SIZE + 6
+        y = self.winfo_rooty() + self.SIZE + 4
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        if x + w > sw - 8:
+            x = max(8, sw - w - 8)
+        if y + h > sh - 8:
+            y = max(8, self.winfo_rooty() - h - 4)
+        tip.wm_geometry(f"+{x}+{y}")
+        self.tip = tip
+
+    def _hide(self, event=None):
+        try:
+            self.itemconfig(self.circle, fill=self["bg"])
+        except tk.TclError:
+            pass
+        if self.tip is not None:
+            try:
+                self.tip.destroy()
+            except tk.TclError:
+                pass
+            self.tip = None
 
 
 # ---------------------------------------------------------------- worker
@@ -1306,6 +1399,7 @@ class App(tk.Tk):
             bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
             activeforeground=TEXT, font=(FONT, 9), anchor="w",
         ).pack(side="left")
+        InfoTip(toggle_row, TIP_AUTO_TERIMA).pack(side="left", padx=(0, 10))
 
         # Dibungkus dalam satu frame supaya bisa disembunyikan sekaligus
         # (pack_forget) kalau "Aktifkan" dimatikan — lihat
@@ -1358,7 +1452,9 @@ class App(tk.Tk):
                 command=self._refresh_auto_visibility,
                 bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
                 activeforeground=TEXT, font=(FONT, 9), anchor="w",
-            ).pack(side="left", padx=(0, 12))
+            ).pack(side="left")
+            InfoTip(jenis_row, tip_jenis("Auto Terima", jenis)).pack(
+                side="left", padx=(2, 12))
 
         # --- panel-panel syarat, satu per jenis, dikumpulkan dalam satu
         # container yang disembunyikan total kalau "Aktifkan" dimatikan ---
@@ -1591,6 +1687,7 @@ class App(tk.Tk):
             bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
             activeforeground=TEXT, font=(FONT, 8), anchor="w",
         ).pack(side="left")
+        InfoTip(row_frame, TIP_TARGET_TAWAR).pack(side="left", padx=(2, 0))
 
         wrap = tk.Frame(row_frame, bg=CARD)
         pct_value = settings.get("target_tawar_pct")
@@ -1618,6 +1715,7 @@ class App(tk.Tk):
             bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
             activeforeground=TEXT, font=(FONT, 8), anchor="w",
         ).pack(side="left")
+        InfoTip(range_row, TIP_RANGE).pack(side="left", padx=(2, 0))
 
         range_wrap = tk.Frame(range_row, bg=CARD)
         rmin_val = settings.get("price_range_min")
@@ -1654,6 +1752,7 @@ class App(tk.Tk):
             bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
             activeforeground=TEXT, font=(FONT, 8), anchor="w",
         ).pack(side="left")
+        InfoTip(outside_row, TIP_OUTSIDE).pack(side="left", padx=(2, 0))
 
         self.auto_tawar_row_index[jenis] = row
         self._refresh_tawar_rows(jenis)
@@ -1730,6 +1829,7 @@ class App(tk.Tk):
             bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
             activeforeground=TEXT, font=(FONT, 9), anchor="w",
         ).pack(side="left")
+        InfoTip(toggle_row, TIP_AUTO_TAWAR).pack(side="left", padx=(0, 10))
 
         self.auto_tawar_delay_box = tk.Frame(toggle_row, bg=CARD)
 
@@ -1778,7 +1878,9 @@ class App(tk.Tk):
                 command=self._refresh_auto_tawar_visibility,
                 bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
                 activeforeground=TEXT, font=(FONT, 9), anchor="w",
-            ).pack(side="left", padx=(0, 12))
+            ).pack(side="left")
+            InfoTip(jenis_row, tip_jenis("Auto Tawar", jenis)).pack(
+                side="left", padx=(2, 12))
 
         self.auto_tawar_fields_frame = tk.Frame(panel, bg=CARD)
         self.auto_tawar_fields_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))

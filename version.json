@@ -1,6 +1,6 @@
 {
-  "version": "1.11.3",
+  "version": "1.12.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan layar login: saat tutorial API ID & Hash ditutup, kolom di bawahnya sekarang ikut naik (sebelumnya tertinggal jauh karena sisa tinggi tutorial). Tutorial sekarang default tertutup, bisa dibuka lewat tautan \"Tampilkan tutorial API ID & Hash\"."
+  "notes": "Fitur baru: tanda seru (!) di samping checkbox Auto Terima dan Auto Tawar (Aktifkan, pilihan jenis, Target Tawar %, Tawar Rentang Harga, dan Di luar rentang). Arahkan kursor ke tanda seru untuk melihat penjelasan fungsinya, tanpa perlu klik."
 }
