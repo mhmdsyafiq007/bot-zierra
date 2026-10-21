@@ -1,6 +1,6 @@
 {
-  "version": "1.12.0",
+  "version": "1.12.1",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Fitur baru: tanda seru (!) di samping checkbox Auto Terima dan Auto Tawar (Aktifkan, pilihan jenis, Target Tawar %, Tawar Rentang Harga, dan Di luar rentang). Arahkan kursor ke tanda seru untuk melihat penjelasan fungsinya, tanpa perlu klik."
+  "notes": "Penjelasan saat kursor diarahkan ke judul field: Target min/max, Client min/max (% dan Rp), Deadline min/max, Kata min/max, Delay (ms), Shortcut Terima/Tawar, Volume Notifikasi, Service yang dipilih/dihindari, Chrome Debug, serta kolom login (API ID, API Hash, Nomor telepon, Kode verifikasi, Password 2FA). Tanpa klik, cukup arahkan kursor ke judulnya."
 }

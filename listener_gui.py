@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.12.0"
+APP_VERSION = "1.12.1"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -223,10 +223,13 @@ class RoundedButton(tk.Canvas):
 class Field(tk.Frame):
     """Kolom isian dengan garis aksen yang menyala saat difokuskan."""
 
-    def __init__(self, parent, label, show=None):
+    def __init__(self, parent, label, show=None, tip=None):
         super().__init__(parent, bg=CARD)
-        tk.Label(self, text=label.upper(), bg=CARD, fg=MUTED,
-                 font=(FONT, 8, "bold"), anchor="w").pack(fill="x", pady=(0, 5))
+        title = tk.Label(self, text=label.upper(), bg=CARD, fg=MUTED,
+                         font=(FONT, 8, "bold"), anchor="w")
+        title.pack(fill="x", pady=(0, 5))
+        if tip:
+            HoverTip(title, tip)
 
         box = tk.Frame(self, bg=FIELD_EDGE, padx=1, pady=1)
         box.pack(fill="x")
@@ -288,32 +291,109 @@ def tip_jenis(aksi, jenis):
             f"diatur di panel {jenis.upper()} di bawah.")
 
 
+_TIP_DEADLINE_MIN = (
+    "Sisa waktu sampai deadline job minimal sekian jam. Syarat deadline "
+    "hanya berlaku kalau Deadline min DAN max sama-sama diisi."
+)
+_TIP_DEADLINE_MAX = (
+    "Sisa waktu sampai deadline job maksimal sekian jam. Syarat deadline "
+    "hanya berlaku kalau Deadline min DAN max sama-sama diisi."
+)
+_TIP_WORD_MIN = (
+    "Jumlah kata minimal (sama atau lebih). Khusus Humanizer; kosongkan "
+    "kalau tidak dibatasi."
+)
+_TIP_WORD_MAX = (
+    "Jumlah kata harus KURANG dari angka ini. Khusus Humanizer; kosongkan "
+    "kalau tidak dibatasi."
+)
 
-class InfoTip(tk.Canvas):
-    """Tanda seru kecil; penjelasan muncul saat kursor diarahkan ke
-    atasnya (tanpa klik) dan hilang saat kursor pergi."""
+# Penjelasan judul field syarat Auto Terima (kunci = key di field_defs).
+TIPS_TERIMA = {
+    "min_target": "Target Persentase job minimal sama dengan angka ini. "
+                  "Di bawahnya ditolak.",
+    "min_client_pct": "Perbandingan Harga Client dengan Harga Estimasi "
+                      "(Client / Estimasi x 100). Job di bawah persentase ini "
+                      "ditolak. Contoh: 80 berarti harga client minimal 80% "
+                      "dari estimasi.",
+    "min_client_price": "Harga Client minimal dalam rupiah, berapa pun "
+                        "perbandingannya dengan estimasi. Di bawah angka ini "
+                        "ditolak.",
+    "deadline_min_h": _TIP_DEADLINE_MIN,
+    "deadline_max_h": _TIP_DEADLINE_MAX,
+    "min_word_count": _TIP_WORD_MIN,
+    "max_word_count": _TIP_WORD_MAX,
+}
 
-    SIZE = 16
+# Penjelasan judul field syarat Auto Tawar.
+TIPS_TAWAR = {
+    "target_min": "Target Persentase job minimal sama dengan angka ini.",
+    "target_max": "Target Persentase job maksimal sama dengan angka ini. "
+                  "Di atasnya ditolak.",
+    "max_client_pct": "Perbandingan Harga Client dengan Harga Estimasi "
+                      "(Client / Estimasi x 100). Job hanya ditawar kalau "
+                      "persentasenya DI BAWAH angka ini. Contoh: 79 berarti "
+                      "harga client harus kurang dari 79% estimasi.",
+    "deadline_min_h": _TIP_DEADLINE_MIN,
+    "deadline_max_h": _TIP_DEADLINE_MAX,
+    "min_word_count": _TIP_WORD_MIN,
+    "max_word_count": _TIP_WORD_MAX,
+}
 
-    def __init__(self, parent, text):
-        bg = parent["bg"]
-        super().__init__(parent, width=self.SIZE, height=self.SIZE, bg=bg,
-                         highlightthickness=0, bd=0, cursor="question_arrow")
+TIP_DELAY_TERIMA = (
+    "Jeda acak (milidetik) antara job terdeteksi memenuhi syarat dan Terima "
+    "otomatis dijalankan. Angka pertama batas bawah, kedua batas atas. "
+    "Isi 0 dan 0 untuk tanpa jeda."
+)
+TIP_DELAY_TAWAR = (
+    "Jeda acak (milidetik) antara job terdeteksi memenuhi syarat dan Tawar "
+    "otomatis dijalankan. Angka pertama batas bawah, kedua batas atas. "
+    "Isi 0 dan 0 untuk tanpa jeda."
+)
+TIP_SHORTCUT_TERIMA = (
+    "Tombol pintas keyboard untuk Terima job yang sedang aktif. Klik "
+    "kotaknya, tekan tombol atau kombinasi baru, lalu klik Simpan."
+)
+TIP_SHORTCUT_TAWAR = (
+    "Tombol pintas keyboard untuk Tawar job yang sedang aktif. Klik "
+    "kotaknya, tekan tombol atau kombinasi baru, lalu klik Simpan."
+)
+TIP_VOLUME = "Mengatur kerasnya suara notifikasi saat job baru masuk."
+TIP_SERVICE_INCLUDE = (
+    "Job Fix File hanya diproses kalau punya SALAH SATU layanan yang "
+    "dicentang di sini (boleh punya layanan lain juga). Kosong berarti "
+    "semua layanan boleh."
+)
+TIP_SERVICE_EXCLUDE = (
+    "Job Fix File ditolak kalau punya SALAH SATU layanan yang dicentang "
+    "di sini."
+)
+TIP_CHROME_DEBUG = (
+    "Chrome khusus (mode debug) yang dikendalikan bot. Pasang / Buka "
+    "membuka Chrome itu kalau belum aktif (tidak akan membuka dobel). "
+    "Shortcut Desktop membuat pintasan untuk membukanya."
+)
+
+
+
+class HoverTip:
+    """Penjelasan kecil yang muncul saat kursor diarahkan ke sebuah widget
+    (tanpa klik) dan hilang saat kursor pergi. Dipakai untuk judul field
+    maupun tanda seru (InfoTip)."""
+
+    def __init__(self, widget, text):
+        self.widget = widget
         self.text = text
         self.tip = None
-        self.circle = self.create_oval(1, 1, self.SIZE - 1, self.SIZE - 1,
-                                       outline=ACCENT, fill=bg, width=1)
-        self.create_text(self.SIZE / 2, self.SIZE / 2 + 0.5, text="!",
-                         fill=ACCENT, font=(FONT, 8, "bold"))
-        self.bind("<Enter>", self._show)
-        self.bind("<Leave>", self._hide)
-        self.bind("<Destroy>", self._hide)
+        widget.bind("<Enter>", self.show, add="+")
+        widget.bind("<Leave>", self.hide, add="+")
+        widget.bind("<Destroy>", self.hide, add="+")
 
-    def _show(self, event=None):
-        self.itemconfig(self.circle, fill=ACCENT_SOFT)
+    def show(self, event=None):
         if self.tip is not None:
             return
-        tip = tk.Toplevel(self)
+        w = self.widget
+        tip = tk.Toplevel(w)
         tip.wm_overrideredirect(True)
         try:
             tip.wm_attributes("-topmost", True)
@@ -324,28 +404,50 @@ class InfoTip(tk.Canvas):
         tk.Label(box, text=self.text, bg=FIELD, fg=TEXT, font=(FONT, 8),
                  justify="left", wraplength=290, padx=10, pady=8).pack()
         tip.update_idletasks()
-        w, h = tip.winfo_reqwidth(), tip.winfo_reqheight()
-        x = self.winfo_rootx() + self.SIZE + 6
-        y = self.winfo_rooty() + self.SIZE + 4
-        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        if x + w > sw - 8:
-            x = max(8, sw - w - 8)
-        if y + h > sh - 8:
-            y = max(8, self.winfo_rooty() - h - 4)
+        tw, th = tip.winfo_reqwidth(), tip.winfo_reqheight()
+        x = w.winfo_rootx() + 4
+        y = w.winfo_rooty() + w.winfo_height() + 4
+        sw, sh = w.winfo_screenwidth(), w.winfo_screenheight()
+        if x + tw > sw - 8:
+            x = max(8, sw - tw - 8)
+        if y + th > sh - 8:
+            y = max(8, w.winfo_rooty() - th - 4)
         tip.wm_geometry(f"+{x}+{y}")
         self.tip = tip
 
-    def _hide(self, event=None):
-        try:
-            self.itemconfig(self.circle, fill=self["bg"])
-        except tk.TclError:
-            pass
+    def hide(self, event=None):
         if self.tip is not None:
             try:
                 self.tip.destroy()
             except tk.TclError:
                 pass
             self.tip = None
+
+
+class InfoTip(tk.Canvas):
+    """Tanda seru kecil di samping checkbox; penjelasan muncul saat kursor
+    diarahkan ke atasnya (tanpa klik)."""
+
+    SIZE = 16
+
+    def __init__(self, parent, text):
+        bg = parent["bg"]
+        super().__init__(parent, width=self.SIZE, height=self.SIZE, bg=bg,
+                         highlightthickness=0, bd=0, cursor="question_arrow")
+        self.circle = self.create_oval(1, 1, self.SIZE - 1, self.SIZE - 1,
+                                       outline=ACCENT, fill=bg, width=1)
+        self.create_text(self.SIZE / 2, self.SIZE / 2 + 0.5, text="!",
+                         fill=ACCENT, font=(FONT, 8, "bold"))
+        self._bg = bg
+        self._hover = HoverTip(self, text)
+        self.bind("<Enter>", lambda _: self.itemconfig(self.circle, fill=ACCENT_SOFT), add="+")
+        self.bind("<Leave>", self._unhighlight, add="+")
+
+    def _unhighlight(self, _=None):
+        try:
+            self.itemconfig(self.circle, fill=self._bg)
+        except tk.TclError:
+            pass
 
 
 # ---------------------------------------------------------------- worker
@@ -804,9 +906,13 @@ class App(tk.Tk):
 
         _apply_guide()
 
-        self.f_api_id = Field(self.body, "API ID")
+        self.f_api_id = Field(self.body, "API ID", tip=(
+            "Nomor identitas aplikasi Telegram (berupa angka) dari "
+            "my.telegram.org/apps, bagian App api_id."))
         self.f_api_id.pack(fill="x", pady=(0, 14))
-        self.f_api_hash = Field(self.body, "API Hash")
+        self.f_api_hash = Field(self.body, "API Hash", tip=(
+            "Kode rahasia 32 huruf dan angka dari my.telegram.org/apps, "
+            "bagian App api_hash. Jangan dibagikan ke siapa pun."))
         self.f_api_hash.pack(fill="x")
 
         self.bind_enter(self.f_api_id.entry, lambda: self.f_api_hash.focus())
@@ -828,7 +934,9 @@ class App(tk.Tk):
         self.step_dots(1)
         self.add_hint("Gunakan format internasional, contoh +628123456789.")
 
-        self.f_phone = Field(self.body, "Nomor telepon")
+        self.f_phone = Field(self.body, "Nomor telepon", tip=(
+            "Nomor HP akun Telegram yang dipakai memantau grup, format "
+            "internasional (+62...). Awalan 0 otomatis diubah jadi +62."))
         self.f_phone.pack(fill="x")
         self.f_phone.focus()
 
@@ -846,7 +954,9 @@ class App(tk.Tk):
         self.add_hint("Kode dikirim sebagai pesan di aplikasi Telegram kamu, "
                       "bukan SMS.")
 
-        self.f_code = Field(self.body, "Kode verifikasi")
+        self.f_code = Field(self.body, "Kode verifikasi", tip=(
+            "Kode login yang dikirim Telegram ke aplikasi Telegram Anda "
+            "(biasanya di chat \"Telegram\", bukan SMS)."))
         self.f_code.pack(fill="x")
         self.f_code.focus()
 
@@ -863,7 +973,9 @@ class App(tk.Tk):
         self.add_hint("Akun ini memakai verifikasi dua langkah. Pastikan benar "
                       "sejak percobaan pertama, Telegram membatasi percobaan gagal.")
 
-        self.f_password = Field(self.body, "Password 2FA", show="\u2022")
+        self.f_password = Field(self.body, "Password 2FA", show="\u2022", tip=(
+            "Hanya diisi kalau akun Telegram memakai verifikasi dua langkah "
+            "(password tambahan)."))
         self.f_password.pack(fill="x")
         self.f_password.focus()
 
@@ -1007,11 +1119,14 @@ class App(tk.Tk):
         settings_row = tk.Frame(self.body, bg=CARD)
         settings_row.grid(row=4, column=0, sticky="ew", pady=(12, 0))
 
-        tk.Label(settings_row, text="SHORTCUT TERIMA", bg=CARD, fg=MUTED,
-                 font=(FONT, 7, "bold")).grid(row=0, column=0, sticky="w")
-        tk.Label(settings_row, text="SHORTCUT TAWAR", bg=CARD, fg=MUTED,
-                 font=(FONT, 7, "bold")).grid(row=0, column=1, sticky="w",
-                                              padx=(14, 0))
+        lbl_sc_terima = tk.Label(settings_row, text="SHORTCUT TERIMA", bg=CARD,
+                                 fg=MUTED, font=(FONT, 7, "bold"))
+        lbl_sc_terima.grid(row=0, column=0, sticky="w")
+        HoverTip(lbl_sc_terima, TIP_SHORTCUT_TERIMA)
+        lbl_sc_tawar = tk.Label(settings_row, text="SHORTCUT TAWAR", bg=CARD,
+                                fg=MUTED, font=(FONT, 7, "bold"))
+        lbl_sc_tawar.grid(row=0, column=1, sticky="w", padx=(14, 0))
+        HoverTip(lbl_sc_tawar, TIP_SHORTCUT_TAWAR)
 
         # Hotkey tidak lagi diketik manual (rawan salah nama tombol) —
         # klik kotaknya lalu TEKAN tombol yang mau dipakai, otomatis
@@ -1239,8 +1354,10 @@ class App(tk.Tk):
         row = tk.Frame(self.body, bg=CARD)
         row.grid(row=5, column=0, sticky="ew", pady=(12, 0))
 
-        tk.Label(row, text="VOLUME NOTIFIKASI", bg=CARD, fg=MUTED,
-                 font=(FONT, 7, "bold")).pack(side="left", padx=(0, 10))
+        lbl_vol = tk.Label(row, text="VOLUME NOTIFIKASI", bg=CARD, fg=MUTED,
+                           font=(FONT, 7, "bold"))
+        lbl_vol.pack(side="left", padx=(0, 10))
+        HoverTip(lbl_vol, TIP_VOLUME)
 
         self.volume_var = tk.IntVar(value=int(self.sound_volume))
         self.scale_volume = ttk.Scale(
@@ -1319,7 +1436,7 @@ class App(tk.Tk):
         "Perbaikan typo",
     )
 
-    def _build_criteria_flow(self, sub, field_defs, entries_out, row):
+    def _build_criteria_flow(self, sub, field_defs, entries_out, row, tips=None):
         """Field-field syarat (Target min, Client min, Deadline, Kata,
         dst) disusun TETAP SEBARIS ke kanan selama masih muat di lebar
         jendela yang tersedia (persis seperti aslinya) — begitu jendela
@@ -1341,8 +1458,11 @@ class App(tk.Tk):
         items = []
         for key, label, value in field_defs:
             wrapper = tk.Frame(flow, bg=CARD)
-            tk.Label(wrapper, text=label.upper(), bg=CARD, fg=MUTED,
-                     font=(FONT, 7, "bold"), anchor="w").pack(anchor="w")
+            title = tk.Label(wrapper, text=label.upper(), bg=CARD, fg=MUTED,
+                             font=(FONT, 7, "bold"), anchor="w")
+            title.pack(anchor="w")
+            if tips and key in tips:
+                HoverTip(title, tips[key])
             entry = tk.Entry(wrapper, bg=FIELD, fg=TEXT, relief="flat",
                              width=8, font=(FONT, 10), insertbackground=ACCENT)
             entry.insert(0, "" if value is None else str(value))
@@ -1406,8 +1526,10 @@ class App(tk.Tk):
         # _refresh_auto_visibility().
         self.auto_delay_box = tk.Frame(toggle_row, bg=CARD)
 
-        tk.Label(self.auto_delay_box, text="Delay (ms)", bg=CARD, fg=MUTED,
-                 font=(FONT, 8)).pack(side="left", padx=(14, 4))
+        lbl_delay = tk.Label(self.auto_delay_box, text="Delay (ms)", bg=CARD,
+                             fg=MUTED, font=(FONT, 8))
+        lbl_delay.pack(side="left", padx=(14, 4))
+        HoverTip(lbl_delay, TIP_DELAY_TERIMA)
 
         self.e_auto_delay_min = tk.Entry(
             self.auto_delay_box, bg=FIELD, fg=TEXT, relief="flat", width=5,
@@ -1502,7 +1624,8 @@ class App(tk.Tk):
                         ("min_word_count", "Kata min", settings.get("min_word_count")))
                     field_defs.append(
                         ("max_word_count", "Kata max", settings.get("max_word_count")))
-                self._build_criteria_flow(sub, field_defs, self.auto_entries[jenis], row=1)
+                self._build_criteria_flow(sub, field_defs, self.auto_entries[jenis],
+                                          row=1, tips=TIPS_TERIMA)
 
             else:  # Fix File — tidak ada Target Persentase, diganti syarat
                    # perbandingan harga + deadline + pilihan layanan.
@@ -1513,7 +1636,8 @@ class App(tk.Tk):
                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
                 ]
                 next_row = self._build_criteria_flow(
-                    sub, field_defs, self.auto_entries[jenis], row=1)
+                    sub, field_defs, self.auto_entries[jenis], row=1,
+                    tips=TIPS_TERIMA)
 
                 # Grid (bukan pack side=left) supaya dua kotak ini benar2
                 # berbagi lebar penuh "sub" secara merata dan tidak
@@ -1526,9 +1650,11 @@ class App(tk.Tk):
 
                 include_box = tk.Frame(service_row, bg=CARD)
                 include_box.grid(row=0, column=0, sticky="new", padx=(0, 20))
-                tk.Label(include_box, text="SERVICE YANG DIPILIH", bg=CARD,
-                         fg=MUTED, font=(FONT, 7, "bold"), anchor="w").pack(
-                    anchor="w", pady=(0, 2))
+                lbl_inc = tk.Label(include_box, text="SERVICE YANG DIPILIH",
+                                   bg=CARD, fg=MUTED, font=(FONT, 7, "bold"),
+                                   anchor="w")
+                lbl_inc.pack(anchor="w", pady=(0, 2))
+                HoverTip(lbl_inc, TIP_SERVICE_INCLUDE)
                 tk.Label(include_box, text="(job boleh punya layanan lain juga)",
                          bg=CARD, fg=MUTED, font=(FONT, 7), anchor="w").pack(
                     anchor="w", pady=(0, 6))
@@ -1545,9 +1671,11 @@ class App(tk.Tk):
 
                 exclude_box = tk.Frame(service_row, bg=CARD)
                 exclude_box.grid(row=0, column=1, sticky="new")
-                tk.Label(exclude_box, text="SERVICE YANG DIHINDARI", bg=CARD,
-                         fg=MUTED, font=(FONT, 7, "bold"), anchor="w").pack(
-                    anchor="w", pady=(0, 2))
+                lbl_exc = tk.Label(exclude_box, text="SERVICE YANG DIHINDARI",
+                                   bg=CARD, fg=MUTED, font=(FONT, 7, "bold"),
+                                   anchor="w")
+                lbl_exc.pack(anchor="w", pady=(0, 2))
+                HoverTip(lbl_exc, TIP_SERVICE_EXCLUDE)
                 tk.Label(exclude_box, text="(ada salah satu ini -> ditolak)",
                          bg=CARD, fg=MUTED, font=(FONT, 7), anchor="w").pack(
                     anchor="w", pady=(0, 6))
@@ -1833,8 +1961,10 @@ class App(tk.Tk):
 
         self.auto_tawar_delay_box = tk.Frame(toggle_row, bg=CARD)
 
-        tk.Label(self.auto_tawar_delay_box, text="Delay (ms)", bg=CARD, fg=MUTED,
-                 font=(FONT, 8)).pack(side="left", padx=(14, 4))
+        lbl_delay_tawar = tk.Label(self.auto_tawar_delay_box, text="Delay (ms)",
+                                   bg=CARD, fg=MUTED, font=(FONT, 8))
+        lbl_delay_tawar.pack(side="left", padx=(14, 4))
+        HoverTip(lbl_delay_tawar, TIP_DELAY_TAWAR)
 
         self.e_auto_tawar_delay_min = tk.Entry(
             self.auto_tawar_delay_box, bg=FIELD, fg=TEXT, relief="flat", width=5,
@@ -1940,7 +2070,8 @@ class App(tk.Tk):
                     field_defs.append(
                         ("max_word_count", "Kata max", settings.get("max_word_count")))
                 next_row = self._build_criteria_flow(
-                    sub, field_defs, self.auto_tawar_entries[jenis], row=1)
+                    sub, field_defs, self.auto_tawar_entries[jenis], row=1,
+                    tips=TIPS_TAWAR)
 
                 self._build_target_tawar_row(sub, jenis, settings, row=next_row)
 
@@ -1951,7 +2082,8 @@ class App(tk.Tk):
                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
                 ]
                 next_row = self._build_criteria_flow(
-                    sub, field_defs, self.auto_tawar_entries[jenis], row=1)
+                    sub, field_defs, self.auto_tawar_entries[jenis], row=1,
+                    tips=TIPS_TAWAR)
 
                 next_row = self._build_target_tawar_row(
                     sub, jenis, settings, row=next_row)
@@ -1964,9 +2096,11 @@ class App(tk.Tk):
 
                 include_box = tk.Frame(service_row, bg=CARD)
                 include_box.grid(row=0, column=0, sticky="new", padx=(0, 20))
-                tk.Label(include_box, text="SERVICE YANG DIPILIH", bg=CARD,
-                         fg=MUTED, font=(FONT, 7, "bold"), anchor="w").pack(
-                    anchor="w", pady=(0, 2))
+                lbl_inc = tk.Label(include_box, text="SERVICE YANG DIPILIH",
+                                   bg=CARD, fg=MUTED, font=(FONT, 7, "bold"),
+                                   anchor="w")
+                lbl_inc.pack(anchor="w", pady=(0, 2))
+                HoverTip(lbl_inc, TIP_SERVICE_INCLUDE)
                 tk.Label(include_box, text="(job boleh punya layanan lain juga)",
                          bg=CARD, fg=MUTED, font=(FONT, 7), anchor="w").pack(
                     anchor="w", pady=(0, 6))
@@ -1983,9 +2117,11 @@ class App(tk.Tk):
 
                 exclude_box = tk.Frame(service_row, bg=CARD)
                 exclude_box.grid(row=0, column=1, sticky="new")
-                tk.Label(exclude_box, text="SERVICE YANG DIHINDARI", bg=CARD,
-                         fg=MUTED, font=(FONT, 7, "bold"), anchor="w").pack(
-                    anchor="w", pady=(0, 2))
+                lbl_exc = tk.Label(exclude_box, text="SERVICE YANG DIHINDARI",
+                                   bg=CARD, fg=MUTED, font=(FONT, 7, "bold"),
+                                   anchor="w")
+                lbl_exc.pack(anchor="w", pady=(0, 2))
+                HoverTip(lbl_exc, TIP_SERVICE_EXCLUDE)
                 tk.Label(exclude_box, text="(ada salah satu ini -> ditolak)",
                          bg=CARD, fg=MUTED, font=(FONT, 7), anchor="w").pack(
                     anchor="w", pady=(0, 6))
@@ -2130,8 +2266,10 @@ class App(tk.Tk):
         supaya tidak menumpuk di area atas."""
         row = tk.Frame(self.body, bg=CARD)
         row.grid(row=9, column=0, sticky="ew", pady=(14, 0))
-        tk.Label(row, text="CHROME DEBUG", bg=CARD, fg=MUTED,
-                 font=(FONT, 7, "bold")).pack(anchor="w")
+        lbl_chrome = tk.Label(row, text="CHROME DEBUG", bg=CARD, fg=MUTED,
+                              font=(FONT, 7, "bold"))
+        lbl_chrome.pack(anchor="w")
+        HoverTip(lbl_chrome, TIP_CHROME_DEBUG)
         btns = tk.Frame(row, bg=CARD)
         btns.pack(anchor="w", pady=(3, 0))
         self.btn_chrome_setup = RoundedButton(
