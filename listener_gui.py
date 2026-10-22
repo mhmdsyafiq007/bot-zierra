@@ -72,8 +72,16 @@ LABEL = "*MASUK*"
 # Kalau format label di grup ternyata beda, cukup sesuaikan dua baris ini.
 LABEL_PAID = "*PAID*"
 LABEL_DONE = "*DONE*"
+# Pesan "REJECT NEGO" di grup yang sama = client menolak tawaran kita.
+# Dicocokkan tanpa peduli huruf besar/kecil & tanda bintang (lihat
+# _handle_reject_nego). Kalau tulisannya di grup ternyata beda, cukup
+# sesuaikan baris ini.
+LABEL_REJECT = "REJECT NEGO"
 URL_PATTERN = re.compile(r"https?://\S+")
 REF_PATTERN = re.compile(r"Ref:\s*(\S+)")
+# Cadangan kalau pesan REJECT NEGO tidak memakai penulisan "Ref: ...".
+REF_FALLBACK_PATTERN = re.compile(
+    r"\b((?:PARAFRASE|HUMANIZER|FIXFILE)-[A-Za-z0-9]+)")
 ID_PATTERN = re.compile(r"/([a-f0-9]{24})(?:[/?]|$)")
 
 REF_COLLECTION = {
@@ -111,7 +119,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.14.1"
+APP_VERSION = "1.15.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -260,13 +268,16 @@ class Field(tk.Frame):
 
 
 TIP_AUTO_TERIMA = (
-    "Kalau aktif, job yang masuk dan memenuhi syarat di bawah langsung "
-    "di-Terima otomatis setelah jeda acak (Delay). Auto Terima dicek lebih "
-    "dulu daripada Auto Tawar, dan satu job hanya memicu satu aksi otomatis."
+    "Kalau aktif, job yang masuk dan memenuhi syarat di bawah di-Terima "
+    "otomatis setelah jeda acak (Delay). Auto Tawar dicek lebih dulu; Auto "
+    "Terima jadi cadangan kalau job tidak ditawar. Kalau tawaran ditolak "
+    "client (pesan REJECT NEGO) dan status kembali waiting-confirmation, "
+    "job yang memenuhi syarat ini juga langsung di-Terima."
 )
 TIP_AUTO_TAWAR = (
-    "Kalau aktif, job yang tidak ter-Terima otomatis tetapi memenuhi syarat "
-    "Auto Tawar di bawah akan ditawar otomatis setelah jeda acak (Delay)."
+    "Kalau aktif, job yang memenuhi syarat Auto Tawar di bawah ditawar "
+    "otomatis setelah jeda acak (Delay). Auto Tawar dicek lebih dulu "
+    "daripada Auto Terima; satu job hanya memicu satu aksi otomatis."
 )
 TIP_TARGET_TAWAR = (
     "Harga tawar dihitung sebagai persentase dari Harga Estimasi (boleh "
@@ -563,6 +574,12 @@ class App(tk.Tk):
         # supaya status bisa terdeteksi lebih cepat tanpa nunggu polling.
         # Runtime-only, tidak disimpan ke config.json.
         self.watched_jobs = {}
+        # ref -> {id, collection, url} untuk semua job *MASUK* yang pernah
+        # dilihat sesi ini; dipakai _handle_reject_nego kalau pesan REJECT
+        # NEGO tidak membawa link job. _reject_inflight mencegah satu ref
+        # diproses ganda kalau pesannya datang berulang.
+        self.known_jobs = {}
+        self._reject_inflight = set()
 
         self.sound_volume = self.load_sound_volume()
         self._volume_save_job = None
@@ -3481,6 +3498,11 @@ class App(tk.Tk):
 
             text = event.raw_text
 
+            # Tawaran kita ditolak client — lihat _handle_reject_nego.
+            if LABEL_REJECT in text.upper():
+                self.ui(self._handle_reject_nego, text)
+                return
+
             # Pesan *PAID*/*DONE* dicocokkan ke job yang sudah KITA terima
             # (lewat Ref) untuk fitur Catatan Job Proses — lebih cepat dari
             # polling 45 detik, dan tidak tersangkut kalau statusnya lama
@@ -3510,6 +3532,11 @@ class App(tk.Tk):
             collection = ref_to_collection(ref)
             id_match = ID_PATTERN.search(url)
             job_id = id_match.group(1) if id_match else None
+
+            if ref and job_id:
+                self.known_jobs[ref] = {
+                    "id": job_id, "collection": collection, "url": url,
+                }
 
             self.current_job = {
                 "ref": ref, "id": job_id, "collection": collection, "url": url,
@@ -3792,23 +3819,112 @@ class App(tk.Tk):
         return self._evaluate_auto_tawar_conditions(info, settings)
 
     def _maybe_auto_actions(self, info, token):
-        """Auto Terima dicek DULUAN; Auto Tawar jadi fallback — hanya
-        dicek kalau job ini tidak lolos syarat Auto Terima. Satu token
+        """Auto Tawar dicek DULUAN; Auto Terima jadi fallback — hanya
+        dicek kalau job ini tidak lolos syarat Auto Tawar. Satu token
         dedupe dipakai bersama supaya satu job cuma pernah memicu SALAH
-        SATU aksi otomatis, tidak dua-duanya."""
+        SATU aksi otomatis, tidak dua-duanya. (Kalau tawaran ditolak
+        client, Auto Terima dicoba lagi lewat _handle_reject_nego.)"""
         if self.auto_action_fired_token == token:
-            return
-        if self._check_auto_terima(info):
-            self.auto_action_fired_token = token
-            threading.Thread(
-                target=self._auto_terima_delayed, args=(token,), daemon=True
-            ).start()
             return
         if self._check_auto_tawar(info):
             self.auto_action_fired_token = token
             threading.Thread(
                 target=self._auto_tawar_delayed, args=(token,), daemon=True
             ).start()
+            return
+        if self._check_auto_terima(info):
+            self.auto_action_fired_token = token
+            threading.Thread(
+                target=self._auto_terima_delayed, args=(token,), daemon=True
+            ).start()
+
+    # ------------------------------------------------------ REJECT NEGO
+    def _handle_reject_nego(self, text):
+        """Pesan REJECT NEGO = client menolak tawaran kita, dan status
+        order akan kembali ke waiting-confirmation. Kalau job itu
+        memenuhi syarat Auto Terima, langsung di-Terima begitu statusnya
+        sudah kembali waiting-confirmation (kalau di-Terima sebelum itu,
+        server menolak: "Status orderan tidak sesuai")."""
+        ref_match = REF_PATTERN.search(text) or REF_FALLBACK_PATTERN.search(text)
+        ref = ref_match.group(1) if ref_match else None
+        if not ref:
+            self.log("[REJECT] Pesan REJECT NEGO masuk tapi Ref tidak "
+                     "terbaca: " + text[:120].replace("\n", " | "), "err")
+            return
+        if not self.auto_enabled:
+            self.log(f"[REJECT] Tawaran {ref} ditolak client (Auto Terima "
+                     "nonaktif — dilewati).", "skip")
+            return
+        known = self.known_jobs.get(ref, {})
+        url_match = URL_PATTERN.search(text)
+        url = url_match.group(0) if url_match else known.get("url")
+        id_match = ID_PATTERN.search(url) if url else None
+        job_id = id_match.group(1) if id_match else known.get("id")
+        collection = ref_to_collection(ref) or known.get("collection")
+        if not (job_id and collection):
+            self.log(f"[REJECT] Tawaran {ref} ditolak client, tapi ID job "
+                     "tidak ditemukan (pesan tanpa link & job tidak dikenal "
+                     "di sesi ini) — dilewati.", "err")
+            return
+        if ref in self._reject_inflight:
+            return  # ref ini sedang diproses
+        self._reject_inflight.add(ref)
+        self.log(f"[REJECT] Tawaran {ref} ditolak client — menunggu status "
+                 "kembali waiting-confirmation...", "sys")
+        threading.Thread(
+            target=self._reject_nego_worker,
+            args=(ref, job_id, collection, url), daemon=True,
+        ).start()
+
+    def _reject_nego_worker(self, ref, job_id, collection, url):
+        try:
+            deadline = time.time() + 60
+            info = None
+            while time.time() < deadline:
+                if self.is_paused:
+                    return
+                cur, complete, hard_error = self.browser.fetch_order_detail(
+                    job_id, collection, url)
+                if hard_error:
+                    self.ui(self.log, f"[REJECT] {ref}: gagal ambil data "
+                                      "job — dibatalkan.", "err")
+                    return
+                status = (cur.get("status") or "").strip().lower().replace("_", "-")
+                if status == "waiting-confirmation" and complete:
+                    info = cur
+                    break
+                time.sleep(1.2)
+            if info is None:
+                self.ui(self.log, f"[REJECT] {ref}: status tidak kembali "
+                                  "waiting-confirmation dalam 60 detik — "
+                                  "dilewati.", "skip")
+                return
+            if not self._check_auto_terima(info):
+                self.ui(self.log, f"[REJECT] {ref} tidak memenuhi syarat "
+                                  "Auto Terima — dilewati.", "skip")
+                return
+
+            lo, hi = self.auto_delay_min_ms / 1000, self.auto_delay_max_ms / 1000
+            if hi > lo:
+                time.sleep(random.uniform(lo, hi))
+            elif hi > 0:
+                time.sleep(hi)
+            if self.is_paused:
+                return
+
+            self.ui(self.log, f"[AUTO] {ref} ditolak client tapi memenuhi "
+                              "syarat Auto Terima — Terima otomatis...", "sys")
+            snapshot = {
+                "ref": ref, "id": job_id, "collection": collection,
+                "url": url, "jenis": info.get("jenis"),
+                "status": info.get("status"),
+                "harga_client": info.get("harga_client"),
+                "deadline": info.get("deadline"),
+            }
+            self._run_and_alert(self.browser.confirm_via_api,
+                                (ref, collection, url), snapshot)
+        finally:
+            self._reject_inflight.discard(ref)
 
     def _auto_terima_delayed(self, token):
         # Jeda acak dalam ms (bisa diatur di panel). Isi 0-0 untuk tanpa

@@ -1,6 +1,6 @@
 {
-  "version": "1.14.1",
+  "version": "1.15.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Tawar default: potongan dari Harga Estimasi diubah. Di bawah 100rb: 15rb (tetap); 100rb-150rb: 30rb; 150rb-200rb: 40rb; 200rb-270rb: 55rb; 270rb-350rb: 70rb; 350rb ke atas: 100rb. Hasil tetap dibulatkan ke bawah ke ribuan dan tidak pernah di bawah Harga Client."
+  "notes": "1) Urutan aksi otomatis dibalik: Auto Tawar dicek lebih dulu, Auto Terima jadi cadangan. 2) Fitur baru REJECT NEGO: saat ada pesan REJECT NEGO di grup (client menolak tawaran), bot menunggu status job kembali waiting-confirmation, lalu kalau memenuhi syarat Auto Terima langsung di-Terima otomatis. Prosesnya dicatat di log dengan awalan [REJECT]."
 }
