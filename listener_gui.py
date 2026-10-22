@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.12.1"
+APP_VERSION = "1.12.2"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -1290,6 +1290,12 @@ class App(tk.Tk):
             self._pending_hotkey_tawar = key_name
         widget.configure(text=key_name.upper(), fg=TEXT)
         self._finish_hotkey_capture()
+        self._log_hotkey_captured(which, key_name)
+
+    def _log_hotkey_captured(self, which, key_name):
+        nama = "Terima" if which == "terima" else "Tawar"
+        self.log(f"[SYS] Key sudah ditetapkan yaitu {key_name.upper()} "
+                 f"(Shortcut {nama}). Klik Simpan untuk menerapkan.", "sys")
 
     def _on_hotkey_capture_keypress(self, event):
         """Jalur fallback (lihat _start_hotkey_capture) — dipakai HANYA
@@ -1312,6 +1318,7 @@ class App(tk.Tk):
             self._pending_hotkey_tawar = key_name
         widget.configure(text=key_name.upper(), fg=TEXT)
         self._finish_hotkey_capture()
+        self._log_hotkey_captured(which, key_name)
 
     def _cancel_hotkey_capture(self):
         widget = self._hotkey_capture_widget
@@ -1338,12 +1345,11 @@ class App(tk.Tk):
         # _start_hotkey_capture — pakai hotkey yang masih TERSIMPAN
         # sekarang (self.hotkey_terima/tawar), bukan yang baru saja
         # ditangkap (itu baru efektif setelah klik Simpan -> save_hotkeys).
+        # announce=False: pengaktifan ulang ini senyap, supaya log tidak
+        # menampilkan shortcut LAMA yang membingungkan. Log "Shortcut
+        # aktif" baru muncul setelah klik Simpan (save_hotkeys).
         if keyboard is not None:
-            self.register_hotkeys()
-
-        self.refresh_buttons()
-        self.footer.config(text="Menunggu pesan berlabel *MASUK*")
-        self.log("Login berhasil. Tekan Start untuk mulai memantau.", "sys")
+            self.register_hotkeys(announce=False)
 
     # ------------------------------------------------------ volume notifikasi
     def _build_volume_panel(self):
@@ -3237,7 +3243,7 @@ class App(tk.Tk):
             pass
 
     # ------------------------------------------------------ shortcut Tawar/Terima
-    def register_hotkeys(self):
+    def register_hotkeys(self, announce=True):
         if keyboard is None:
             self.log("[SYS] Modul 'keyboard' tidak terpasang — shortcut "
                      "Tawar/Terima tidak aktif. Jalankan: pip install keyboard",
@@ -3249,9 +3255,10 @@ class App(tk.Tk):
             keyboard.add_hotkey(self.hotkey_terima, self._trigger_terima)
             keyboard.add_hotkey(self.hotkey_tawar, self._trigger_tawar)
             self._hotkeys_registered = True
-            self.log(f"[SYS] Shortcut aktif — Terima: "
-                     f"{self.hotkey_terima.upper()}, Tawar: "
-                     f"{self.hotkey_tawar.upper()}", "sys")
+            if announce:
+                self.log(f"[SYS] Shortcut aktif — Terima: "
+                         f"{self.hotkey_terima.upper()}, Tawar: "
+                         f"{self.hotkey_tawar.upper()}", "sys")
         except Exception as exc:                  # noqa: BLE001
             self.log(f"[SYS] Gagal mendaftarkan shortcut: {exc} (coba jalankan "
                      "sebagai Administrator)", "err")

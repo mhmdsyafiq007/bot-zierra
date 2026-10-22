@@ -1,6 +1,6 @@
 {
-  "version": "1.12.1",
+  "version": "1.12.2",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Penjelasan saat kursor diarahkan ke judul field: Target min/max, Client min/max (% dan Rp), Deadline min/max, Kata min/max, Delay (ms), Shortcut Terima/Tawar, Volume Notifikasi, Service yang dipilih/dihindari, Chrome Debug, serta kolom login (API ID, API Hash, Nomor telepon, Kode verifikasi, Password 2FA). Tanpa klik, cukup arahkan kursor ke judulnya."
+  "notes": "Perbaikan log saat mengatur shortcut: begitu tombol dilepas, log kini menulis \"Key sudah ditetapkan yaitu <KEY> (Shortcut Terima/Tawar). Klik Simpan untuk menerapkan.\" — tidak lagi menampilkan shortcut lama atau pesan \"Login berhasil\" yang salah tempat. Log \"Shortcut aktif — Terima: ..., Tawar: ...\" baru muncul setelah klik Simpan."
 }
