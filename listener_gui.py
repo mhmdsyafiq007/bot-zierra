@@ -38,7 +38,8 @@ try:
 except ImportError:
     keyboard = None
 
-from browser_actions import BrowserActions, compute_tawar_price_from_client
+from browser_actions import (BrowserActions, compute_tawar_price,
+                             compute_tawar_price_from_client)
 
 
 # ---------------------------------------------------------------- paths
@@ -110,7 +111,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.12.3"
+APP_VERSION = "1.13.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -270,7 +271,8 @@ TIP_AUTO_TAWAR = (
 TIP_TARGET_TAWAR = (
     "Harga tawar dihitung sebagai persentase dari Harga Estimasi (boleh "
     "lebih dari 100%), lalu dibulatkan ke bawah ke ribuan. Kalau tidak "
-    "dicentang, bot memakai tawar default: sedikit di bawah Harga Estimasi."
+    "dicentang, bot memakai tawar default: sedikit di bawah Harga Estimasi. "
+    "Apa pun metodenya, harga tawar tidak pernah di bawah Harga Client."
 )
 TIP_RANGE = (
     "Kalau Harga Estimasi job berada di antara Harga Min dan Max, dasar "
@@ -3346,6 +3348,30 @@ class App(tk.Tk):
                             estimasi, pct)
                 except (TypeError, ValueError):
                     harga_tawar = None
+
+        # LANTAI: harga tawar TIDAK boleh lebih rendah dari Harga Client.
+        # Logika tawar default (bracket di bawah Harga Estimasi) dihitung
+        # di sini (bukan di do_tawar) supaya ikut dicek — sebelumnya job
+        # dengan estimasi Rp80.924 dan client Rp70.000 ditawar Rp65.000,
+        # lebih rendah dari harga client. Berlaku untuk semua jalur tawar
+        # (persentase, rentang harga, default, juga Tawar manual F3).
+        try:
+            client_price = float(job.get("harga_client_raw"))
+        except (TypeError, ValueError):
+            client_price = None
+        if harga_tawar is None and job.get("harga_estimasi_raw") not in (None, ""):
+            try:
+                harga_tawar = compute_tawar_price(job.get("harga_estimasi_raw"))
+            except (TypeError, ValueError):
+                harga_tawar = None
+        if (client_price is not None and harga_tawar is not None
+                and harga_tawar < client_price):
+            harga_lantai = int(round(client_price))
+            self._safe_log(
+                f"[TAWAR] Harga tawar Rp{int(harga_tawar)} lebih rendah dari "
+                f"Harga Client Rp{harga_lantai} — dinaikkan jadi "
+                f"Rp{harga_lantai}", "sys")
+            harga_tawar = harga_lantai
 
         threading.Thread(
             target=self._run_and_alert,

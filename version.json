@@ -1,6 +1,6 @@
 {
-  "version": "1.12.3",
+  "version": "1.13.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Auto Terima: field \"Client min (Rp)\" diganti namanya jadi \"Harga Client min (Rp)\" supaya jelas yang dibandingkan adalah Harga Client (bukan Harga Estimasi), dan penjelasannya diperbaiki beserta contoh."
+  "notes": "Tawar: harga tawar sekarang tidak pernah lebih rendah dari Harga Client. Kalau hasil hitungan (default di bawah Harga Estimasi, persentase, atau rentang harga) lebih kecil dari Harga Client, harga tawar dinaikkan jadi Harga Client dan dicatat di log. Berlaku untuk Auto Tawar maupun Tawar manual."
 }
