@@ -111,7 +111,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.13.0"
+APP_VERSION = "1.14.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -279,6 +279,13 @@ TIP_RANGE = (
     "persentase dinaikkan menjadi Harga Max. Jadi persentase di atas 100% "
     "menjamin tawar di atas Harga Max. Contoh: rentang 60.000-100.000, "
     "estimasi 67.000, persentase 120% -> 100.000 x 120% = 120.000."
+)
+TIP_DEFAULT_FLOOR = (
+    "Pengaturan tawar default: kalau Harga Estimasi DAN Harga Client sama-sama "
+    "di bawah angka ini, tawar default menjadi angka ini. Contoh: 100000 "
+    "berarti job dengan estimasi dan client di bawah Rp100.000 ditawar "
+    "Rp100.000. Hanya berlaku saat memakai tawar default (Target Tawar % "
+    "tidak dicentang, atau Harga Estimasi di luar rentang harga)."
 )
 TIP_OUTSIDE = (
     "Kalau Harga Estimasi job di luar rentang, bot memakai tawar default "
@@ -1895,7 +1902,29 @@ class App(tk.Tk):
         self.auto_tawar_row_index[jenis] = row
         self._refresh_tawar_rows(jenis)
 
-        return row + 3
+        # --- baris keempat (selalu tampil): pengaturan tawar default ---
+        floor_row = tk.Frame(sub, bg=CARD)
+        floor_row.grid(row=row + 3, column=0, columnspan=6, sticky="w",
+                       padx=8, pady=(10, 0))
+        floor_var = tk.BooleanVar(value=bool(settings.get("use_default_floor")))
+        self.auto_tawar_floor_vars[jenis] = floor_var
+        tk.Checkbutton(
+            floor_row, text="Tawar default minimal", variable=floor_var,
+            bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
+            activeforeground=TEXT, font=(FONT, 8), anchor="w",
+        ).pack(side="left")
+        InfoTip(floor_row, TIP_DEFAULT_FLOOR).pack(side="left", padx=(2, 8))
+        floor_entry = tk.Entry(floor_row, bg=FIELD, fg=TEXT, relief="flat",
+                               width=9, font=(FONT, 10),
+                               insertbackground=ACCENT)
+        floor_val = settings.get("default_floor_price")
+        floor_entry.insert(0, "" if floor_val is None else str(floor_val))
+        floor_entry.pack(side="left", ipady=3)
+        tk.Label(floor_row, text="Rp", bg=CARD, fg=MUTED,
+                 font=(FONT, 8)).pack(side="left", padx=(4, 0))
+        self.auto_tawar_floor_entries[jenis] = floor_entry
+
+        return row + 4
 
     def _refresh_tawar_rows(self, jenis):
         """Atur tampil/sembunyi tiga lapis checkbox Tawar per jenis:
@@ -2040,6 +2069,8 @@ class App(tk.Tk):
         self.auto_tawar_range_rows = {}
         self.auto_tawar_outside_vars = {}
         self.auto_tawar_outside_rows = {}
+        self.auto_tawar_floor_vars = {}
+        self.auto_tawar_floor_entries = {}
         self.auto_tawar_row_index = {}
 
         row_i = 0
@@ -2199,6 +2230,12 @@ class App(tk.Tk):
                                        allow_blank=True)
                 outside_range_default = bool(
                     self.auto_tawar_outside_vars[jenis].get())
+                use_default_floor = bool(self.auto_tawar_floor_vars[jenis].get())
+                default_floor_price = read(self.auto_tawar_floor_entries[jenis],
+                                           allow_blank=True)
+                if use_default_floor and default_floor_price is None:
+                    raise ValueError(
+                        "Tawar default minimal dicentang tapi angkanya kosong")
                 if use_price_range:
                     if price_range_min is None or price_range_max is None:
                         raise ValueError(
@@ -2221,6 +2258,8 @@ class App(tk.Tk):
                         "price_range_min": price_range_min,
                         "price_range_max": price_range_max,
                         "outside_range_default": outside_range_default,
+                        "use_default_floor": use_default_floor,
+                        "default_floor_price": default_floor_price,
                     }
                     if jenis == "Humanizer":
                         s["min_word_count"] = read(entries["min_word_count"],
@@ -2239,6 +2278,8 @@ class App(tk.Tk):
                         "price_range_min": price_range_min,
                         "price_range_max": price_range_max,
                         "outside_range_default": outside_range_default,
+                        "use_default_floor": use_default_floor,
+                        "default_floor_price": default_floor_price,
                         "service_include": [
                             svc for svc in self.FIXFILE_SERVICES
                             if self.auto_tawar_fixfile_include_vars[svc].get()
@@ -2718,6 +2759,7 @@ class App(tk.Tk):
             "use_target_tawar": False, "target_tawar_pct": None,
             "use_price_range": False, "price_range_min": None,
             "price_range_max": None, "outside_range_default": False,
+            "use_default_floor": False, "default_floor_price": 100000,
         }
         humanizer_defaults = {
             "enabled": False, "target_min": 0, "target_max": 20,
@@ -2726,6 +2768,7 @@ class App(tk.Tk):
             "use_target_tawar": False, "target_tawar_pct": None,
             "use_price_range": False, "price_range_min": None,
             "price_range_max": None, "outside_range_default": False,
+            "use_default_floor": False, "default_floor_price": 100000,
         }
         fixfile_defaults = {
             "enabled": False, "max_client_pct": 70,
@@ -2734,6 +2777,7 @@ class App(tk.Tk):
             "use_target_tawar": False, "target_tawar_pct": None,
             "use_price_range": False, "price_range_min": None,
             "price_range_max": None, "outside_range_default": False,
+            "use_default_floor": False, "default_floor_price": 100000,
         }
 
         return {
@@ -3361,7 +3405,23 @@ class App(tk.Tk):
             client_price = None
         if harga_tawar is None and job.get("harga_estimasi_raw") not in (None, ""):
             try:
-                harga_tawar = compute_tawar_price(job.get("harga_estimasi_raw"))
+                estimasi_val = float(job.get("harga_estimasi_raw"))
+                floor_price = jenis_settings.get("default_floor_price")
+                # Pengaturan "Tawar default minimal": kalau Harga Estimasi
+                # DAN Harga Client sama-sama di bawah angka ini, tawar
+                # default jadi angka itu (mis. 100rb).
+                if (jenis_settings.get("use_default_floor")
+                        and floor_price not in (None, "")
+                        and client_price is not None
+                        and estimasi_val < float(floor_price)
+                        and client_price < float(floor_price)):
+                    harga_tawar = int(float(floor_price))
+                    self._safe_log(
+                        f"[TAWAR] Estimasi Rp{int(estimasi_val)} & Client "
+                        f"Rp{int(client_price)} di bawah Rp{harga_tawar} — "
+                        f"tawar default jadi Rp{harga_tawar}", "sys")
+                else:
+                    harga_tawar = compute_tawar_price(estimasi_val)
             except (TypeError, ValueError):
                 harga_tawar = None
         if (client_price is not None and harga_tawar is not None
