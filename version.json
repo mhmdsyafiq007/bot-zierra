@@ -1,6 +1,6 @@
 {
-  "version": "1.12.2",
+  "version": "1.12.3",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan log saat mengatur shortcut: begitu tombol dilepas, log kini menulis \"Key sudah ditetapkan yaitu <KEY> (Shortcut Terima/Tawar). Klik Simpan untuk menerapkan.\" — tidak lagi menampilkan shortcut lama atau pesan \"Login berhasil\" yang salah tempat. Log \"Shortcut aktif — Terima: ..., Tawar: ...\" baru muncul setelah klik Simpan."
+  "notes": "Auto Terima: field \"Client min (Rp)\" diganti namanya jadi \"Harga Client min (Rp)\" supaya jelas yang dibandingkan adalah Harga Client (bukan Harga Estimasi), dan penjelasannya diperbaiki beserta contoh."
 }

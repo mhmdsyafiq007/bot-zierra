@@ -110,7 +110,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.12.2"
+APP_VERSION = "1.12.3"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -316,9 +316,11 @@ TIPS_TERIMA = {
                       "(Client / Estimasi x 100). Job di bawah persentase ini "
                       "ditolak. Contoh: 80 berarti harga client minimal 80% "
                       "dari estimasi.",
-    "min_client_price": "Harga Client minimal dalam rupiah, berapa pun "
-                        "perbandingannya dengan estimasi. Di bawah angka ini "
-                        "ditolak.",
+    "min_client_price": "Batas minimal HARGA CLIENT dalam rupiah (harga "
+                        "yang diajukan client, bukan Harga Estimasi). Job "
+                        "dengan Harga Client di bawah angka ini ditolak. "
+                        "Contoh: 75000 berarti Harga Client minimal Rp75.000, "
+                        "berapa pun persentasenya terhadap estimasi.",
     "deadline_min_h": _TIP_DEADLINE_MIN,
     "deadline_max_h": _TIP_DEADLINE_MAX,
     "min_word_count": _TIP_WORD_MIN,
@@ -1621,7 +1623,7 @@ class App(tk.Tk):
                 field_defs = [
                     ("min_target", "Target min (%)", settings.get("min_target")),
                     ("min_client_pct", "Client min (%)", settings.get("min_client_pct")),
-                    ("min_client_price", "Client min (Rp)", settings.get("min_client_price")),
+                    ("min_client_price", "Harga Client min (Rp)", settings.get("min_client_price")),
                     ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
                 ]
@@ -1637,7 +1639,7 @@ class App(tk.Tk):
                    # perbandingan harga + deadline + pilihan layanan.
                 field_defs = [
                     ("min_client_pct", "Client min (%)", settings.get("min_client_pct")),
-                    ("min_client_price", "Client min (Rp)", settings.get("min_client_price")),
+                    ("min_client_price", "Harga Client min (Rp)", settings.get("min_client_price")),
                     ("deadline_min_h", "Deadline min (jam)", settings.get("deadline_min_h")),
                     ("deadline_max_h", "Deadline max (jam)", settings.get("deadline_max_h")),
                 ]
