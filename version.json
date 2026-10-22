@@ -1,6 +1,6 @@
 {
-  "version": "1.14.0",
+  "version": "1.14.1",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Auto Tawar: pengaturan baru \"Tawar default minimal\" (per jenis, ada tanda seru penjelasan). Kalau dicentang dan Harga Estimasi DAN Harga Client sama-sama di bawah angka yang diisi (default 100000), tawar default menjadi angka itu (mis. Rp100.000). Berlaku untuk tawar default saja (Target Tawar % tidak dicentang, atau estimasi di luar rentang harga); batas bawah Harga Client tetap berlaku."
+  "notes": "Tawar default: potongan dari Harga Estimasi diubah. Di bawah 100rb: 15rb (tetap); 100rb-150rb: 30rb; 150rb-200rb: 40rb; 200rb-270rb: 55rb; 270rb-350rb: 70rb; 350rb ke atas: 100rb. Hasil tetap dibulatkan ke bawah ke ribuan dan tidak pernah di bawah Harga Client."
 }

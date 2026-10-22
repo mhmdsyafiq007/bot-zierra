@@ -126,15 +126,15 @@ def compute_tawar_price(estimasi):
     if estimasi < 100_000:
         potongan = 15_000
     elif estimasi < 150_000:
-        potongan = 20_000
-    elif estimasi < 200_000:
-        potongan = 25_000
-    elif estimasi < 270_000:
         potongan = 30_000
-    elif estimasi < 400_000:
+    elif estimasi < 200_000:
         potongan = 40_000
+    elif estimasi < 270_000:
+        potongan = 55_000
+    elif estimasi < 350_000:
+        potongan = 70_000
     else:
-        potongan = 50_000
+        potongan = 100_000
     mentah = max(estimasi - potongan, 0)
     return (mentah // 1000) * 1000
 
