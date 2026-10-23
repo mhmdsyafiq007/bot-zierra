@@ -119,7 +119,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.15.0"
+APP_VERSION = "1.15.1"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2393,7 +2393,9 @@ class App(tk.Tk):
                 info_col = tk.Frame(item, bg=FIELD)
                 info_col.pack(side="left", fill="x", expand=True)
                 tk.Label(info_col,
-                         text=f"{note.get('jenis', '-')} — {note.get('harga_client', '-')}",
+                         text=(f"{note.get('jenis', '-')} — {note.get('harga_client', '-')}"
+                               + (f"  ·  tawar {note['harga_tawar']}"
+                                  if note.get('harga_tawar') else "")),
                          bg=FIELD, fg=TEXT, font=(FONT, 10, "bold"), anchor="w"
                          ).pack(anchor="w")
                 tk.Label(info_col,
@@ -2457,6 +2459,7 @@ class App(tk.Tk):
             "ref": ref,
             "jenis": job.get("jenis") or "-",
             "harga_client": job.get("harga_client") or "-",
+            "harga_tawar": job.get("harga_tawar_fmt") or "",
             "deadline": job.get("deadline") or "-",
             "url": job.get("url") or "",
             "status": status_baru,
@@ -2516,9 +2519,10 @@ class App(tk.Tk):
         Baru dicatat sekali kalau status berubah jadi sesuatu SELAIN
         status awal & SELAIN waiting-payment. Kalau status waiting-payment
         itu kedaluwarsa jadi "expired", berhenti memantau job ini tanpa
-        dicatat (client tidak jadi bayar). Dibatasi 3 jam supaya thread
-        tidak hidup selamanya kalau client tidak kunjung bayar/status
-        tidak pernah berubah.
+        dicatat (client tidak jadi bayar). Dibatasi 3 jam (jauh melebihi
+        1 jam) supaya thread tidak hidup selamanya kalau client tidak
+        kunjung bayar/status tidak pernah berubah. Dipakai untuk job hasil
+        Terima maupun Tawar (watch_mode="tawar").
 
         Jalan PARALEL dengan _handle_status_broadcast (notif *PAID*/*DONE*
         grup) — dua-duanya sama-sama bisa memicu catatan; siapa pun yang
@@ -2565,6 +2569,18 @@ class App(tk.Tk):
             if norm_baru == "waiting-payment":
                 # Masih menunggu client bayar — belum masuk proses, lanjut pantau.
                 continue
+            if job.get("watch_mode") == "tawar":
+                # Job hasil TAWAR: selama masih proses negosiasi (status
+                # "waiting-...", "nego...", atau balik ke status awal
+                # karena tawaran ditolak) belum dianggap masuk proses.
+                if (norm_baru.startswith("waiting") or "nego" in norm_baru
+                        or norm_baru == _norm(status_awal)):
+                    continue
+                if any(w in norm_baru for w in
+                       ("cancel", "reject", "refund", "fail")):
+                    if ref:
+                        self.watched_jobs.pop(ref, None)
+                    return
             if norm_baru != _norm(status_awal):
                 # Berubah jadi status lain (bukan waiting-payment/expired) —
                 # ini yang dianggap "masuk proses".
@@ -3450,10 +3466,20 @@ class App(tk.Tk):
                 f"Rp{harga_lantai}", "sys")
             harga_tawar = harga_lantai
 
+        # Snapshot job supaya tawar yang BERHASIL ikut dipantau
+        # (_watch_job_status -> Catatan Hari Ini) begitu client setuju &
+        # bayar sampai status masuk proses — sebelumnya cuma Terima yang
+        # dipantau, jadi hasil tawar tidak pernah tercatat.
+        snapshot = dict(job)
+        snapshot["watch_mode"] = "tawar"
+        snapshot["harga_tawar_fmt"] = (
+            "Rp" + format(int(harga_tawar), ",").replace(",", ".")
+            if harga_tawar else None)
         threading.Thread(
             target=self._run_and_alert,
             args=(self.browser.do_tawar,
-                  (job.get("url"), job.get("harga_estimasi_raw"), harga_tawar)),
+                  (job.get("url"), job.get("harga_estimasi_raw"), harga_tawar),
+                  snapshot),
             daemon=True,
         ).start()
 
