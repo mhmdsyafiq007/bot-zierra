@@ -643,6 +643,71 @@ class BrowserActions:
       .catch(function(err){ cb({error: String(err)}); });
     """
 
+    # Ambil SEMUA order milik worker yang sedang login per koleksi (dashboard
+    # memotong 10/halaman di sisi browser, API-nya sendiri bisa limit besar).
+    # Path endpoint daftar & "me" dicoba beberapa kandidat karena belum
+    # terkonfirmasi 100% — hasil/diagnosa dikembalikan apa adanya.
+    FETCH_LIST_JS = """
+    var cb = arguments[arguments.length - 1];
+    var collections = arguments[0];
+    var token = localStorage.getItem('adminToken');
+    if (!token) { cb({error: 'no-token'}); return; }
+    var H = { headers: { 'Authorization': 'Bearer ' + token } };
+    var origin = 'https://admin.kawalu.id';
+    function getJson(u) {
+        return fetch(u, H).then(function(r){
+            return r.json().then(function(d){ return {status: r.status, data: d, url: u}; },
+                                 function(){ return {status: r.status, data: null, url: u}; });
+        });
+    }
+    function firstOk(urls) {
+        var i = 0;
+        function next() {
+            if (i >= urls.length) return Promise.resolve(null);
+            return getJson(urls[i++]).then(function(r){
+                return (r.status >= 200 && r.status < 300 && r.data) ? r : next();
+            }, next);
+        }
+        return next();
+    }
+    var diag = [];
+    firstOk([origin + '/api/admin/me', origin + '/api/me']).then(function(me){
+        var d = me ? me.data : null;
+        var wid = d && (d._id || (d.data && d.data._id) || (d.user && d.user._id));
+        if (!wid) diag.push('me: id worker tidak ditemukan');
+        var bases = [origin + '/api/admin/orders', origin + '/api/orders'];
+        var out = [];
+        function fetchColl(ci) {
+            if (ci >= collections.length) return Promise.resolve();
+            var c = collections[ci];
+            function page(base, n) {
+                var u = base + '?collection=' + c + '&limit=100&page=' + n +
+                        '&sort=newest' + (wid ? '&worker=' + wid : '&mine=true');
+                return getJson(u).then(function(r){
+                    if (r.status < 200 || r.status >= 300 || !r.data || !r.data.data) {
+                        diag.push(c + ': HTTP ' + r.status + ' ' + u);
+                        return false;
+                    }
+                    r.data.data.forEach(function(o){
+                        out.push({collection: c, id: o._id, ref: o.ref, status: o.status});
+                    });
+                    var tp = r.data.totalPages || 1;
+                    if (n < tp && n < 20) return page(base, n + 1);
+                    return true;
+                });
+            }
+            function tryBase(bi) {
+                if (bi >= bases.length) return Promise.resolve();
+                return page(bases[bi], 1).then(function(ok){
+                    return ok ? null : tryBase(bi + 1);
+                });
+            }
+            return tryBase(0).then(function(){ return fetchColl(ci + 1); });
+        }
+        return fetchColl(0).then(function(){ cb({orders: out, diag: diag}); });
+    }).catch(function(err){ cb({error: String(err)}); });
+    """
+
     def _run_authed_fetch(self, script, url, *args):
         ch = self.api
         with ch.lock:
@@ -784,6 +849,27 @@ class BrowserActions:
                      f"Key yang tersedia: {keys}", "err")
 
         return info, complete, False
+
+    def fetch_process_orders(self):
+        """Semua order berstatus process/processing milik worker yang login
+        (koleksi yang didukung bot). Return (list[{collection,id,ref,status}],
+        error|None). Diagnosa endpoint yang gagal ikut di-log."""
+        try:
+            result = self._run_authed_fetch(
+                self.FETCH_LIST_JS, None, list(COLLECTION_FIELDS.keys()))
+        except Exception as exc:                  # noqa: BLE001
+            return [], f"Gagal ambil daftar order: {exc}"
+        err = self._check_common_errors(result, "ambil daftar order")
+        if err:
+            return [], err
+        for line in result.get("diag") or []:
+            self.log(f"[API] {line}", "err")
+        found = []
+        for o in result.get("orders") or []:
+            st = str(o.get("status") or "").strip().lower()
+            if st in ("process", "processing") and o.get("id") and o.get("ref"):
+                found.append(o)
+        return found, None
 
     def confirm_via_api(self, ref, collection, url=None, _retry=True):
         """Terima job langsung lewat API — satu request POST, tanpa klik

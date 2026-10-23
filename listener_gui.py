@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.0"
+APP_VERSION = "1.17.1"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -577,6 +577,7 @@ class App(tk.Tk):
         self.job_notes_list = self.load_job_notes()
         self.notes_popup = None
         self.process_popup = None
+        self._sync_lock = threading.Lock()
         self.process_popup_position = self.load_process_popup_position()
         self._process_tick = None
         self._process_monitor_started = False
@@ -2864,6 +2865,57 @@ class App(tk.Tk):
         # Siapkan session & tab Chrome debug sekarang, bukan saat job
         # pertama masuk, supaya popup pertama pun tidak menunggu.
         threading.Thread(target=self.browser.warm_up, daemon=True).start()
+        threading.Thread(target=self._sync_process_jobs, daemon=True).start()
+
+    def _sync_process_jobs(self):
+        """Dipanggil tiap Start ditekan: ambil semua job berstatus
+        process/processing milik user lewat API (bukan cuma 10 teratas
+        dashboard), lengkapi detailnya, lalu masukkan ke Catatan / Job
+        Proses kalau belum ada."""
+        from datetime import datetime as _dt
+        with self._sync_lock:
+            found, err = self.browser.fetch_process_orders()
+            if err:
+                self._safe_log(f"[CATATAN] Sinkron job proses gagal: {err}", "err")
+                return
+            known = {n.get("ref") for n in self.job_notes_list}
+            new_entries = []
+            for o in found:
+                if o["ref"] in known:
+                    continue
+                info, _, hard = self.browser.fetch_order_detail(
+                    o["id"], o["collection"], None)
+                if hard:
+                    continue
+                dl = info.get("deadline_dt")
+                new_entries.append({
+                    "ref": o["ref"],
+                    "jenis": info.get("jenis") or "-",
+                    "harga_client": info.get("harga_client") or "-",
+                    "harga_tawar": "",
+                    "deadline": info.get("deadline") or "-",
+                    "url": "",
+                    "status": str(o.get("status") or "process"),
+                    "time": _dt.now().strftime("%H:%M"),
+                    "id": o["id"],
+                    "collection": o["collection"],
+                    "deadline_ts": dl.timestamp() if dl is not None else None,
+                })
+            self.ui(self._apply_synced_jobs, new_entries, len(found))
+
+    def _apply_synced_jobs(self, new_entries, total):
+        for e in new_entries:
+            if any(n.get("ref") == e["ref"] for n in self.job_notes_list):
+                continue
+            self._unwatch(e["ref"])
+            self.job_notes_list.append(e)
+        if new_entries:
+            self.save_job_notes()
+            self._refresh_notes_badge()
+            self._refresh_notes_popup_if_open()
+        self._refresh_process_popup_if_open()
+        self.log(f"[CATATAN] Sinkron job proses: {total} job process di akun, "
+                 f"{len(new_entries)} baru ditambahkan.", "sys")
 
     def on_pause(self):
         self.is_paused = True
