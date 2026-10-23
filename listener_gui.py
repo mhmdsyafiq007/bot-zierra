@@ -118,7 +118,7 @@ WATCH_SECONDS = 3 * 3600
 # setelah aplikasi dibuka ulang (objek datetime dll sengaja tidak ikut).
 WATCH_PERSIST_KEYS = ("ref", "id", "collection", "url", "jenis", "status",
                       "harga_client", "deadline", "watch_mode",
-                      "harga_tawar_fmt", "watch_started")
+                      "harga_tawar_fmt", "watch_started", "deadline_ts")
 
 # Jeda antar pengecekan status koneksi (detik)
 WATCHDOG_INTERVAL = 5
@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.16.0"
+APP_VERSION = "1.17.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -576,6 +576,10 @@ class App(tk.Tk):
         # "Proses"), dicatat di sini untuk dilihat hari itu saja.
         self.job_notes_list = self.load_job_notes()
         self.notes_popup = None
+        self.process_popup = None
+        self.process_popup_position = self.load_process_popup_position()
+        self._process_tick = None
+        self._process_monitor_started = False
         self.notes_popup_position = self.load_notes_popup_position()
 
         # Job yang baru diterima & masih dipantau (ref -> job snapshot).
@@ -1196,6 +1200,7 @@ class App(tk.Tk):
         self.log("Login berhasil. Tekan Start untuk mulai memantau.", "sys")
         # Lanjutkan pantauan job yang belum selesai sebelum aplikasi ditutup.
         self.after(3000, self._resume_watched_jobs)
+        self.after(4000, self._start_process_monitor)
 
     # ------------------------------------------------ pasang Chrome debug
     def _run_chrome_task(self, button, fn, busy_text, idle_text):
@@ -2341,6 +2346,10 @@ class App(tk.Tk):
             row, self._notes_button_text(), self.show_notes_popup,
             width=220, height=34, fill=ACCENT_SOFT, bg=CARD, subtle=True)
         self.btn_notes.pack(side="left")
+        self.btn_process = RoundedButton(
+            row, self._process_button_text(), self.show_process_popup,
+            width=170, height=34, fill=ACCENT_SOFT, bg=CARD, subtle=True)
+        self.btn_process.pack(side="left", padx=(8, 0))
 
     def _build_chrome_row(self):
         """Tombol pasang Chrome debug + shortcut Desktop, paling bawah
@@ -2455,12 +2464,14 @@ class App(tk.Tk):
             self.save_job_notes()
             self._refresh_notes_badge()
             self.show_notes_popup()
+            self._refresh_process_popup_if_open()
 
     def clear_job_notes(self):
         self.job_notes_list = []
         self.save_job_notes()
         self._refresh_notes_badge()
         self.show_notes_popup()
+        self._refresh_process_popup_if_open()
 
     # ------------------------------------------- simpan & lanjutkan pantauan
     def _persist_watched_jobs(self):
@@ -2520,13 +2531,175 @@ class App(tk.Tk):
             "url": job.get("url") or "",
             "status": status_baru,
             "time": _dt.now().strftime("%H:%M"),
+            "id": job.get("id"),
+            "collection": job.get("collection"),
+            "deadline_ts": job.get("deadline_ts"),
         }
         self.job_notes_list.append(entry)
         self.save_job_notes()
         self._refresh_notes_badge()
-        self.show_notes_popup()
+        self._refresh_notes_popup_if_open()
+        # Job baru masuk proses -> popup Job Proses yang muncul (bukan Catatan).
+        self.show_process_popup()
         self.log(f"[CATATAN] {entry['jenis']} ({entry['ref']}) -> {status_baru}",
                  "sys")
+
+    # ------------------------------------------------------------------
+    # Popup "Job Proses": hanya job yang belum done, urut deadline terdekat.
+    # Catatan Hari Ini tetap utuh (semua job tercatat, termasuk yang done).
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _is_finished_status(status):
+        st = (status or "").strip().lower()
+        return any(w in st for w in ("done", "complete", "selesai", "cancel",
+                                     "refund", "reject", "expired", "fail"))
+
+    def _active_process_jobs(self):
+        jobs = [n for n in self.job_notes_list
+                if not self._is_finished_status(n.get("status"))]
+        jobs.sort(key=lambda n: (n.get("deadline_ts") is None,
+                                 n.get("deadline_ts") or 0))
+        return jobs
+
+    def _process_button_text(self):
+        return f"Job Proses ({len(self._active_process_jobs())})"
+
+    def _refresh_process_badge(self):
+        if getattr(self, "btn_process", None) and self.btn_process.winfo_exists():
+            self.btn_process.set_text(self._process_button_text())
+
+    def _refresh_notes_popup_if_open(self):
+        if getattr(self, "notes_popup", None) and self.notes_popup.winfo_exists():
+            self.show_notes_popup()
+
+    def _refresh_process_popup_if_open(self):
+        self._refresh_process_badge()
+        if getattr(self, "process_popup", None) and self.process_popup.winfo_exists():
+            self.show_process_popup()
+
+    @staticmethod
+    def _fmt_remaining(ts):
+        if not ts:
+            return "-", MUTED
+        left = ts - time.time()
+        late = left < 0
+        left = abs(int(left))
+        d, rem = divmod(left, 86400)
+        h, rem = divmod(rem, 3600)
+        m = rem // 60
+        txt = (f"{d}h " if d else "") + (f"{h}j " if (h or d) else "") + f"{m}m"
+        if late:
+            return f"lewat {txt}", RED
+        return f"sisa {txt}", (AMBER if left < 6 * 3600 else GREEN)
+
+    def show_process_popup(self):
+        if getattr(self, "process_popup", None) and self.process_popup.winfo_exists():
+            self.process_popup.destroy()
+        self._refresh_process_badge()
+
+        win = tk.Toplevel(self, bg=CARD)
+        win.title("Job Proses")
+        win.configure(bg=CARD)
+        self.process_popup = win
+        if self.process_popup_position:
+            win.geometry(f"+{self.process_popup_position[0]}+{self.process_popup_position[1]}")
+        win.bind("<Configure>", self._on_process_popup_move)
+        win.bind("<Destroy>", self._on_process_popup_destroyed)
+
+        pad = tk.Frame(win, bg=CARD, padx=16, pady=14)
+        pad.pack(fill="both", expand=True)
+        tk.Label(pad, text="Job Proses", bg=CARD, fg=TEXT,
+                 font=(FONT, 12, "bold")).pack(anchor="w", pady=(0, 2))
+        tk.Label(pad, text="Job yang sedang dikerjakan, deadline terdekat di "
+                           "atas. Hilang otomatis kalau sudah done.",
+                 bg=CARD, fg=MUTED, font=(FONT, 8), wraplength=320,
+                 justify="left").pack(anchor="w", pady=(0, 10))
+
+        jobs = self._active_process_jobs()
+        if not jobs:
+            tk.Label(pad, text="Tidak ada job yang sedang proses.", bg=CARD,
+                     fg=MUTED, font=(FONT, 9)).pack(anchor="w")
+        for note in jobs:
+            item = tk.Frame(pad, bg=FIELD, padx=10, pady=7)
+            item.pack(fill="x", pady=3)
+            col = tk.Frame(item, bg=FIELD)
+            col.pack(side="left", fill="x", expand=True)
+            tk.Label(col,
+                     text=(f"{note.get('jenis', '-')} — {note.get('harga_client', '-')}"
+                           + (f"  ·  tawar {note['harga_tawar']}"
+                              if note.get('harga_tawar') else "")),
+                     bg=FIELD, fg=TEXT, font=(FONT, 10, "bold"), anchor="w"
+                     ).pack(anchor="w")
+            tk.Label(col, text=f"{note.get('status', '-')}  ·  {note.get('ref', '-')}",
+                     bg=FIELD, fg=MUTED, font=(FONT, 8), anchor="w").pack(anchor="w")
+            rem_txt, rem_color = self._fmt_remaining(note.get("deadline_ts"))
+            line = tk.Frame(col, bg=FIELD)
+            line.pack(anchor="w")
+            tk.Label(line, text=f"Deadline: {note.get('deadline', '-')}  ·  ",
+                     bg=FIELD, fg=MUTED, font=(FONT, 8)).pack(side="left")
+            tk.Label(line, text=rem_txt, bg=FIELD, fg=rem_color,
+                     font=(FONT, 8, "bold")).pack(side="left")
+            url = note.get("url")
+            if url:
+                RoundedButton(item, "Buka Detail",
+                              lambda u=url: webbrowser.open(u),
+                              width=90, height=26, fill=ACCENT, bg=FIELD
+                              ).pack(side="right")
+
+        # Segarkan hitung mundur tiap 30 detik selama popup terbuka.
+        if self._process_tick:
+            try:
+                self.after_cancel(self._process_tick)
+            except Exception:
+                pass
+        self._process_tick = self.after(30000, self._refresh_process_popup_if_open)
+
+    def _on_process_popup_move(self, event):
+        win = getattr(self, "process_popup", None)
+        if win and win.winfo_exists() and event.widget is win:
+            self.process_popup_position = (win.winfo_x(), win.winfo_y())
+
+    def _on_process_popup_destroyed(self, event):
+        if event.widget is self.process_popup and self.process_popup_position:
+            self.save_process_popup_position(*self.process_popup_position)
+
+    def load_process_popup_position(self):
+        pos = self._read_raw_config().get("process_popup_position")
+        if isinstance(pos, list) and len(pos) == 2:
+            return (int(pos[0]), int(pos[1]))
+        return None
+
+    def save_process_popup_position(self, x, y):
+        data = self._read_raw_config()
+        data["process_popup_position"] = [x, y]
+        self._write_raw_config(data)
+
+    def _start_process_monitor(self):
+        """Thread pemantau (jalan juga saat Pause): cek status job yang
+        belum done lewat API tiap ~60 detik; kalau sudah done -> otomatis
+        hilang dari popup Job Proses. Pelengkap notif *DONE* grup."""
+        if self._process_monitor_started:
+            return
+        self._process_monitor_started = True
+        threading.Thread(target=self._process_monitor_loop, daemon=True).start()
+
+    def _process_monitor_loop(self):
+        while True:
+            time.sleep(60)
+            try:
+                for note in list(self._active_process_jobs()):
+                    jid, coll = note.get("id"), note.get("collection")
+                    if not (jid and coll):
+                        continue
+                    info, _, hard_error = self.browser.fetch_order_detail(
+                        jid, coll, note.get("url"))
+                    if hard_error:
+                        continue
+                    st = (info.get("status") or "").strip().lower()
+                    if any(w in st for w in ("done", "complete", "selesai")):
+                        self.ui(self._mark_job_note_done, note.get("ref"))
+            except Exception as e:
+                self._safe_log(f"[CATATAN] Pemantau job proses error: {e}", "err")
 
     def _mark_job_note_done(self, ref):
         """Dipanggil saat pesan *DONE* grup cocok dengan ref job kita yang
@@ -2542,8 +2715,9 @@ class App(tk.Tk):
             return
         self.save_job_notes()
         self._refresh_notes_badge()
-        self.show_notes_popup()
-        self.log(f"[CATATAN] {ref} -> done (lewat notif *DONE* grup)", "sys")
+        self._refresh_notes_popup_if_open()
+        self._refresh_process_popup_if_open()
+        self.log(f"[CATATAN] {ref} -> done", "sys")
 
     def _handle_status_broadcast(self, text, is_paid):
         """Dipanggil tiap pesan berlabel *PAID*/*DONE* masuk di grup yang
@@ -2587,6 +2761,12 @@ class App(tk.Tk):
         ref = job.get("ref")
         job_id, collection, url = job.get("id"), job.get("collection"), job.get("url")
         job.setdefault("watch_started", time.time())
+        dl = job.get("deadline_dt")
+        if dl is not None and not job.get("deadline_ts"):
+            try:
+                job["deadline_ts"] = dl.timestamp()
+            except Exception:
+                pass
         if ref:
             self.watched_jobs[ref] = job
             self.ui(self._persist_watched_jobs)

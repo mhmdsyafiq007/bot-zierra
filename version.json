@@ -1,6 +1,6 @@
 {
-  "version": "1.16.0",
+  "version": "1.17.0",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Catatan Hari Ini: pemantauan job (hasil Terima/Tawar) sekarang tersimpan di config.json dan otomatis dilanjutkan saat aplikasi ditutup lalu dibuka lagi (setelah login, log menulis \"[CATATAN] Melanjutkan pemantauan N job\"). Batas pantau 3 jam dihitung sejak aksi dilakukan, bukan sejak aplikasi dibuka. Pemantauan tetap jalan saat listener di-Pause. Job yang sudah lewat batas waktu atau sudah tercatat tidak dilanjutkan."
+  "notes": "Tombol baru \"Job Proses (N)\" di samping Catatan Hari Ini. Popup ini yang muncul saat ada job baru masuk proses: hanya menampilkan job yang belum done, diurutkan deadline terdekat (lengkap sisa waktu, merah kalau lewat), dan hilang otomatis saat status berubah done (lewat notif *DONE* grup atau pengecekan API tiap 60 detik, tetap jalan saat Pause). Catatan Hari Ini tetap utuh."
 }
