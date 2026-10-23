@@ -671,11 +671,16 @@ class BrowserActions:
         return next();
     }
     var diag = [];
-    firstOk([origin + '/api/admin/me', origin + '/api/me']).then(function(me){
+    var wid = null;
+    try {   // token JWT memuat id worker di payload-nya
+        var pl = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        wid = pl.id || pl._id || null;
+    } catch (e) {}
+    (wid ? Promise.resolve(null) : firstOk([origin + '/api/admin/me', origin + '/api/me'])).then(function(me){
         var d = me ? me.data : null;
-        var wid = d && (d._id || (d.data && d.data._id) || (d.user && d.user._id));
+        if (!wid) wid = d && (d._id || (d.data && d.data._id) || (d.user && d.user._id));
         if (!wid) diag.push('me: id worker tidak ditemukan');
-        var bases = [origin + '/api/admin/orders', origin + '/api/orders'];
+        var bases = [origin + '/api/admin/orders'];
         var out = [];
         function fetchColl(ci) {
             if (ci >= collections.length) return Promise.resolve();
