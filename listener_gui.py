@@ -119,7 +119,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.15.1"
+APP_VERSION = "1.15.2"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -3519,24 +3519,26 @@ class App(tk.Tk):
 
         @client.on(events.NewMessage(chats=TARGET_CHAT))
         async def handler(event):                  # noqa: ANN001
-            if self.is_paused:
+            text = event.raw_text
+
+            # Pesan *PAID*/*DONE* dicocokkan ke job yang sudah KITA terima
+            # atau tawar (lewat Ref) untuk fitur Catatan Job Proses — lebih
+            # cepat dari polling 45 detik, dan tidak tersangkut kalau
+            # statusnya lama berubah di server. Job orang lain (ref tidak
+            # kita kenal) diabaikan. Dicek PALING DULU, SEBELUM cek pause:
+            # pencatatan harus tetap jalan walau listener sedang di-Pause
+            # (Pause hanya menghentikan job baru & aksi otomatis, bukan
+            # pemantauan job yang sudah diterima/ditawar).
+            if LABEL_PAID in text or LABEL_DONE in text:
+                self.ui(self._handle_status_broadcast, text, LABEL_PAID in text)
                 return
 
-            text = event.raw_text
+            if self.is_paused:
+                return
 
             # Tawaran kita ditolak client — lihat _handle_reject_nego.
             if LABEL_REJECT in text.upper():
                 self.ui(self._handle_reject_nego, text)
-                return
-
-            # Pesan *PAID*/*DONE* dicocokkan ke job yang sudah KITA terima
-            # (lewat Ref) untuk fitur Catatan Job Proses — lebih cepat dari
-            # polling 45 detik, dan tidak tersangkut kalau statusnya lama
-            # berubah di server. Job orang lain (ref tidak kita kenal)
-            # diabaikan. Dicek lebih dulu karena dua label ini tidak akan
-            # pernah muncul bareng *MASUK*.
-            if LABEL_PAID in text or LABEL_DONE in text:
-                self.ui(self._handle_status_broadcast, text, LABEL_PAID in text)
                 return
 
             if LABEL not in text:

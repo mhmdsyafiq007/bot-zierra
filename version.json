@@ -1,6 +1,6 @@
 {
-  "version": "1.15.1",
+  "version": "1.15.2",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan Catatan Hari Ini: job hasil TAWAR sekarang ikut dipantau (sebelumnya hanya Terima, jadi tawar yang diterima client lalu dibayar tidak pernah tercatat). Begitu status berubah jadi proses (atau ada notif PAID di grup) job masuk catatan, lengkap dengan harga tawarnya. Masa pantau tetap 3 jam, jadi pembayaran dalam 1 jam pasti tercatat. Status negosiasi/waiting/ditolak tidak dianggap masuk proses."
+  "notes": "Catatan Hari Ini tetap aktif walau listener di-Pause: notifikasi PAID/DONE dari grup sekarang tetap diproses saat dijeda (sebelumnya diabaikan), sementara pemantauan status lewat polling memang sudah tidak terpengaruh Pause. Pause tetap menghentikan job baru dan aksi otomatis."
 }
