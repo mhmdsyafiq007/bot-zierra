@@ -110,6 +110,16 @@ REF_JENIS_LABEL = {
     "FIXFILE": "Fix File",
 }
 
+# Lama maksimal sebuah job (hasil Terima/Tawar) dipantau untuk Catatan Hari
+# Ini, dihitung sejak aksi dilakukan — tetap berjalan walau listener di-Pause
+# atau aplikasi sempat ditutup lalu dibuka lagi (lihat _resume_watched_jobs).
+WATCH_SECONDS = 3 * 3600
+# Field job yang disimpan ke config.json supaya pemantauan bisa dilanjutkan
+# setelah aplikasi dibuka ulang (objek datetime dll sengaja tidak ikut).
+WATCH_PERSIST_KEYS = ("ref", "id", "collection", "url", "jenis", "status",
+                      "harga_client", "deadline", "watch_mode",
+                      "harga_tawar_fmt", "watch_started")
+
 # Jeda antar pengecekan status koneksi (detik)
 WATCHDOG_INTERVAL = 5
 
@@ -119,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.15.2"
+APP_VERSION = "1.16.0"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -580,6 +590,7 @@ class App(tk.Tk):
         # diproses ganda kalau pesannya datang berulang.
         self.known_jobs = {}
         self._reject_inflight = set()
+        self._watch_resumed = False
 
         self.sound_volume = self.load_sound_volume()
         self._volume_save_job = None
@@ -1183,6 +1194,8 @@ class App(tk.Tk):
         self.refresh_buttons()
         self.footer.config(text="Menunggu pesan berlabel *MASUK*")
         self.log("Login berhasil. Tekan Start untuk mulai memantau.", "sys")
+        # Lanjutkan pantauan job yang belum selesai sebelum aplikasi ditutup.
+        self.after(3000, self._resume_watched_jobs)
 
     # ------------------------------------------------ pasang Chrome debug
     def _run_chrome_task(self, button, fn, busy_text, idle_text):
@@ -2449,12 +2462,55 @@ class App(tk.Tk):
         self._refresh_notes_badge()
         self.show_notes_popup()
 
+    # ------------------------------------------- simpan & lanjutkan pantauan
+    def _persist_watched_jobs(self):
+        """Simpan daftar job yang sedang dipantau ke config.json."""
+        try:
+            data = self._read_raw_config()
+            data["watched_jobs"] = {
+                ref: {k: job.get(k) for k in WATCH_PERSIST_KEYS}
+                for ref, job in list(self.watched_jobs.items())
+            }
+            self._write_raw_config(data)
+        except Exception:                             # noqa: BLE001
+            pass
+
+    def _unwatch(self, ref):
+        """Berhenti memantau satu job (dan simpan perubahannya)."""
+        if ref and self.watched_jobs.pop(ref, None) is not None:
+            self.ui(self._persist_watched_jobs)
+
+    def _resume_watched_jobs(self):
+        """Dipanggil sekali setelah login: lanjutkan pemantauan job yang
+        belum selesai saat aplikasi ditutup. Job yang sudah lewat batas
+        WATCH_SECONDS dibuang."""
+        if self._watch_resumed:
+            return
+        self._watch_resumed = True
+        saved = self._read_raw_config().get("watched_jobs") or {}
+        now = time.time()
+        noted = {n.get("ref") for n in self.job_notes_list}
+        resumed = 0
+        for ref, job in saved.items():
+            if not isinstance(job, dict) or ref in noted:
+                continue
+            if now - float(job.get("watch_started") or 0) > WATCH_SECONDS:
+                continue
+            self.watched_jobs[ref] = job
+            threading.Thread(target=self._watch_job_status, args=(job, 5),
+                             daemon=True).start()
+            resumed += 1
+        self._persist_watched_jobs()
+        if resumed:
+            self.log(f"[CATATAN] Melanjutkan pemantauan {resumed} job yang "
+                     "belum masuk proses.", "sys")
+
     def _add_job_note(self, job, status_baru):
         from datetime import datetime as _dt
         ref = job.get("ref") or "-"
         # Sudah masuk proses (dicatat) — berhenti dipantau, baik lewat
         # polling (_watch_job_status) maupun lewat notif *PAID* grup.
-        self.watched_jobs.pop(ref, None)
+        self._unwatch(ref)
         entry = {
             "ref": ref,
             "jenis": job.get("jenis") or "-",
@@ -2509,10 +2565,10 @@ class App(tk.Tk):
             # *DONE* bisa datang kapan saja — kalau job ini masih di
             # watched_jobs (polling belum sempat mendeteksi "proses"
             # duluan), hentikan juga pemantauannya.
-            self.watched_jobs.pop(ref, None)
+            self._unwatch(ref)
             self._mark_job_note_done(ref)
 
-    def _watch_job_status(self, job):
+    def _watch_job_status(self, job, first_delay=45):
         """Pantau status order yang baru diterima sampai benar-benar masuk
         proses (bukan sekadar "waiting-payment", karena order memang
         lazim berstatus waiting-payment dulu sebelum client bayar).
@@ -2530,8 +2586,10 @@ class App(tk.Tk):
         lewat _add_job_note, jadi yang kedua tidak dobel mencatat)."""
         ref = job.get("ref")
         job_id, collection, url = job.get("id"), job.get("collection"), job.get("url")
+        job.setdefault("watch_started", time.time())
         if ref:
             self.watched_jobs[ref] = job
+            self.ui(self._persist_watched_jobs)
         if not (job_id and collection):
             return
 
@@ -2546,9 +2604,11 @@ class App(tk.Tk):
         def _norm(s):
             return (s or "").strip().lower().replace("_", "-")
 
-        deadline = time.time() + 3 * 3600
+        deadline = float(job["watch_started"]) + WATCH_SECONDS
+        delay = first_delay
         while time.time() < deadline:
-            time.sleep(45)
+            time.sleep(delay)
+            delay = 45
             # Sudah ditangani lewat notif *PAID*/*DONE* grup selagi tidur —
             # tidak perlu polling lagi untuk job ini.
             if ref and ref not in self.watched_jobs:
@@ -2563,8 +2623,7 @@ class App(tk.Tk):
                 continue
             if "expired" in norm_baru:
                 # Client tidak jadi bayar — berhenti memantau, tidak dicatat.
-                if ref:
-                    self.watched_jobs.pop(ref, None)
+                self._unwatch(ref)
                 return
             if norm_baru == "waiting-payment":
                 # Masih menunggu client bayar — belum masuk proses, lanjut pantau.
@@ -2578,14 +2637,15 @@ class App(tk.Tk):
                     continue
                 if any(w in norm_baru for w in
                        ("cancel", "reject", "refund", "fail")):
-                    if ref:
-                        self.watched_jobs.pop(ref, None)
+                    self._unwatch(ref)
                     return
             if norm_baru != _norm(status_awal):
                 # Berubah jadi status lain (bukan waiting-payment/expired) —
                 # ini yang dianggap "masuk proses".
                 self.ui(self._add_job_note, job, status_baru)
                 return
+        # Batas waktu pantau habis tanpa pernah masuk proses.
+        self._unwatch(ref)
 
     def refresh_buttons(self):
         """Perbarui tampilan pill status & tombol Start/Pause.
