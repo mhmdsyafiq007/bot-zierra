@@ -1,6 +1,6 @@
 {
-  "version": "1.17.4",
+  "version": "1.17.5",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Log kini menampilkan progress unduhan update (persen dan MB) pada satu baris yang diperbarui di tempat."
+  "notes": "Perbaikan: saat chromedriver/Chrome debug sempat terputus (error WinError 10061 \"actively refused\"), bot sekarang otomatis membuang sesi lama dan menyambung ulang, sehingga tab job bisa terbuka lagi dan detail job tidak gagal terus. Log sinkron job proses kini menyebut ref & status tiap job yang terdeteksi."
 }

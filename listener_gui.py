@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.4"
+APP_VERSION = "1.17.5"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2909,6 +2909,10 @@ class App(tk.Tk):
             known = {n.get("ref") for n in self.job_notes_list}
             new_entries = []
             for o in found:
+                self._safe_log(f"[CATATAN] Terdeteksi di akun: {o['ref']} "
+                               f"(status API: {o.get('status')}"
+                               f"{', sudah ada di catatan' if o['ref'] in known else ''})",
+                               "sys")
                 if o["ref"] in known:
                     continue
                 info, _, hard = self.browser.fetch_order_detail(

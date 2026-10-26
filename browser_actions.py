@@ -254,8 +254,12 @@ class BrowserActions:
             try:
                 _ = ch.driver.window_handles  # cek session masih hidup
                 return ch.driver
-            except WebDriverException:
+            except Exception:                 # noqa: BLE001
+                # Termasuk MaxRetryError/NewConnectionError (chromedriver
+                # sudah mati) yang BUKAN WebDriverException — tanpa ini
+                # driver mati terus dipakai & tidak pernah dibuat ulang.
                 ch.driver = None
+                ch.handle = None
 
         self._ensure_browser_up()
         try:
@@ -318,6 +322,8 @@ class BrowserActions:
         return any(s in text for s in (
             "invalid session", "no such window", "target window already closed",
             "chrome not reachable", "disconnected", "tab was closed",
+            "max retries exceeded", "connection refused", "winerror 10061",
+            "actively refused", "newconnectionerror", "connectionpool",
         ))
 
     def _on_admin_origin(self, drv):
@@ -714,6 +720,21 @@ class BrowserActions:
     """
 
     def _run_authed_fetch(self, script, url, *args, timeout=WAIT_TIMEOUT):
+        try:
+            return self._run_authed_fetch_once(script, url, *args,
+                                               timeout=timeout)
+        except Exception as exc:                  # noqa: BLE001
+            if not self._looks_recoverable(exc):
+                raise
+            # Session/chromedriver mati (mis. Chrome debug sempat ditutup
+            # atau driver terhenti) — buang session lama, sambung ulang.
+            self.log("[API] Session Chrome debug terputus — menyambung "
+                     "ulang...", "sys")
+            self._reset_channel(self.api)
+            return self._run_authed_fetch_once(script, url, *args,
+                                               timeout=timeout)
+
+    def _run_authed_fetch_once(self, script, url, *args, timeout=WAIT_TIMEOUT):
         ch = self.api
         with ch.lock:
             drv = self._ensure_driver(ch)
