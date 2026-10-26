@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.3"
+APP_VERSION = "1.17.4"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -1121,6 +1121,7 @@ class App(tk.Tk):
         self.log_box.tag_config("hit", foreground=GREEN)
         self.log_box.tag_config("skip", foreground=MUTED)
         self.log_box.tag_config("sys", foreground=ACCENT)
+        self.log_box.tag_config("progress", foreground=ACCENT)
         self.log_box.tag_config("err", foreground=RED)
 
         # Grip buat menarik sisi bawah kotak log — tinggi kotak log jadi
@@ -2852,7 +2853,27 @@ class App(tk.Tk):
         if not getattr(self, "log_box", None) or not self.log_box.winfo_exists():
             return
         self.log_box.config(state="normal")
+        self.log_box.tag_remove("progress", "1.0", "end")  # progress lama dikunci
         self.log_box.insert("end", text + "\n", tag)
+        self.log_box.see("end")
+        self.log_box.config(state="disabled")
+
+    def log_progress(self, text, final=False):
+        """Satu baris log yang ditimpa di tempat (untuk progress unduhan).
+        final=True -> baris dibiarkan permanen dan tidak ditimpa lagi."""
+        if not getattr(self, "log_box", None) or not self.log_box.winfo_exists():
+            return
+        self.log_box.config(state="normal")
+        rng = self.log_box.tag_ranges("progress")
+        if rng:
+            self.log_box.delete(rng[0], rng[1])
+            self.log_box.mark_set("insert", rng[0])
+            self.log_box.insert(rng[0], text, "progress")
+        else:
+            self.log_box.insert("end", text, "progress")
+        if final:
+            self.log_box.tag_remove("progress", "1.0", "end")
+            self.log_box.insert("end", "\n", "sys")
         self.log_box.see("end")
         self.log_box.config(state="disabled")
 
@@ -3513,6 +3534,11 @@ class App(tk.Tk):
                         raise RuntimeError("server mengembalikan halaman, "
                                            "bukan file .exe (link mungkin "
                                            "lagi diperbarui — coba lagi nanti)")
+                    try:
+                        total = int(resp.headers.get("Content-Length") or 0)
+                    except ValueError:
+                        total = 0
+                    got, last_pct, last_t = 0, -1, 0.0
                     with open(new_exe, "wb") as f:
                         while True:
                             chunk = resp.read(1024 * 256)
@@ -3520,6 +3546,24 @@ class App(tk.Tk):
                                 break
                             f.write(chunk)
                             hasher.update(chunk)
+                            got += len(chunk)
+                            now = time.time()
+                            pct = int(got * 100 / total) if total else -1
+                            if now - last_t >= 0.25 and pct != last_pct:
+                                last_t, last_pct = now, pct
+                                mb = got / 1048576
+                                txt = (f"[UPDATE] Unduh: {pct}%  ({mb:.1f} / "
+                                       f"{total / 1048576:.1f} MB)" if total
+                                       else f"[UPDATE] Unduh: {mb:.1f} MB")
+                                self.ui(self.log_progress, txt)
+                    if total:
+                        self.ui(self.log_progress,
+                                f"[UPDATE] Unduh: 100%  ({got / 1048576:.1f} / "
+                                f"{total / 1048576:.1f} MB)", True)
+                    else:
+                        self.ui(self.log_progress,
+                                f"[UPDATE] Unduh selesai ({got / 1048576:.1f} MB)",
+                                True)
 
                 size = os.path.getsize(new_exe) if os.path.exists(new_exe) else 0
                 if size < 1_000_000:  # .exe asli ukurannya puluhan MB
