@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.5"
+APP_VERSION = "1.17.6"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -225,6 +225,20 @@ class RoundedButton(tk.Canvas):
 
     def set_text(self, text):
         self.itemconfig(self.label, text=text)
+
+    def set_active(self, active):
+        """Tandai tombol sebagai 'sedang terbuka' (warna aksen penuh) atau
+        kembali ke tampilan awal."""
+        if not hasattr(self, "_base_fill"):
+            self._base_fill, self._base_subtle = self.fill, self.subtle
+        if active:
+            self.fill, self.subtle = ACCENT, False
+        else:
+            self.fill, self.subtle = self._base_fill, self._base_subtle
+        self.hover = mix(self.fill, "#ffffff", 0.16)
+        self.itemconfig(self.shape, fill=self.fill,
+                        outline=mix(self.fill, "#ffffff", 0.22))
+        self.itemconfig(self.label, fill=TEXT if self.subtle else "#FFFFFF")
 
     def set_enabled(self, value):
         self.enabled = value
@@ -2345,11 +2359,11 @@ class App(tk.Tk):
         row = tk.Frame(self.body, bg=CARD)
         row.grid(row=8, column=0, sticky="ew", pady=(14, 0))
         self.btn_notes = RoundedButton(
-            row, self._notes_button_text(), self.show_notes_popup,
+            row, self._notes_button_text(), self.toggle_notes_popup,
             width=220, height=34, fill=ACCENT_SOFT, bg=CARD, subtle=True)
         self.btn_notes.pack(side="left")
         self.btn_process = RoundedButton(
-            row, self._process_button_text(), self.show_process_popup,
+            row, self._process_button_text(), self.toggle_process_popup,
             width=170, height=34, fill=ACCENT_SOFT, bg=CARD, subtle=True)
         self.btn_process.pack(side="left", padx=(8, 0))
 
@@ -2374,11 +2388,39 @@ class App(tk.Tk):
         self.btn_chrome_shortcut.pack(side="left", padx=(8, 0))
 
     def _notes_button_text(self):
-        return f"Catatan Hari Ini ({len(self.job_notes_list)})"
+        mark = "● " if self._popup_open("notes_popup") else ""
+        return f"{mark}Catatan Hari Ini ({len(self.job_notes_list)})"
+
+    def _popup_open(self, attr):
+        w = getattr(self, attr, None)
+        try:
+            return bool(w and w.winfo_exists())
+        except Exception:                          # noqa: BLE001
+            return False
+
+    def toggle_notes_popup(self):
+        if self._popup_open("notes_popup"):
+            self.notes_popup.destroy()
+        else:
+            self.show_notes_popup()
+
+    def toggle_process_popup(self):
+        if self._popup_open("process_popup"):
+            self.process_popup.destroy()
+        else:
+            self.show_process_popup()
+
+    def _sync_popup_buttons(self):
+        for attr, btn, txt in (
+                ("notes_popup", "btn_notes", self._notes_button_text),
+                ("process_popup", "btn_process", self._process_button_text)):
+            b = getattr(self, btn, None)
+            if b is not None and b.winfo_exists():
+                b.set_text(txt())
+                b.set_active(self._popup_open(attr))
 
     def _refresh_notes_badge(self):
-        if getattr(self, "btn_notes", None) and self.btn_notes.winfo_exists():
-            self.btn_notes.set_text(self._notes_button_text())
+        self._sync_popup_buttons()
 
     def show_notes_popup(self):
         """Popup terpisah yang bisa digeser (title bar bawaan OS), posisi
@@ -2396,6 +2438,7 @@ class App(tk.Tk):
             win.geometry(f"+{self.notes_popup_position[0]}+{self.notes_popup_position[1]}")
         win.bind("<Configure>", self._on_notes_popup_move)
         win.bind("<Destroy>", self._on_notes_popup_destroyed)
+        self._sync_popup_buttons()
 
         pad = tk.Frame(win, bg=CARD, padx=16, pady=14)
         pad.pack(fill="both", expand=True)
@@ -2459,6 +2502,9 @@ class App(tk.Tk):
     def _on_notes_popup_destroyed(self, event):
         if self.notes_popup_position:
             self.save_notes_popup_position(*self.notes_popup_position)
+        if event.widget is self.notes_popup:
+            self.notes_popup = None
+            self._sync_popup_buttons()
 
     def remove_job_note(self, index):
         if 0 <= index < len(self.job_notes_list):
@@ -2564,11 +2610,11 @@ class App(tk.Tk):
         return jobs
 
     def _process_button_text(self):
-        return f"Job Proses ({len(self._active_process_jobs())})"
+        mark = "● " if self._popup_open("process_popup") else ""
+        return f"{mark}Job Proses ({len(self._active_process_jobs())})"
 
     def _refresh_process_badge(self):
-        if getattr(self, "btn_process", None) and self.btn_process.winfo_exists():
-            self.btn_process.set_text(self._process_button_text())
+        self._sync_popup_buttons()
 
     def _refresh_notes_popup_if_open(self):
         if getattr(self, "notes_popup", None) and self.notes_popup.winfo_exists():
@@ -2607,6 +2653,7 @@ class App(tk.Tk):
             win.geometry(f"+{self.process_popup_position[0]}+{self.process_popup_position[1]}")
         win.bind("<Configure>", self._on_process_popup_move)
         win.bind("<Destroy>", self._on_process_popup_destroyed)
+        self._sync_popup_buttons()
 
         pad = tk.Frame(win, bg=CARD, padx=16, pady=14)
         pad.pack(fill="both", expand=True)
@@ -2662,8 +2709,11 @@ class App(tk.Tk):
             self.process_popup_position = (win.winfo_x(), win.winfo_y())
 
     def _on_process_popup_destroyed(self, event):
-        if event.widget is self.process_popup and self.process_popup_position:
-            self.save_process_popup_position(*self.process_popup_position)
+        if event.widget is self.process_popup:
+            if self.process_popup_position:
+                self.save_process_popup_position(*self.process_popup_position)
+            self.process_popup = None
+            self._sync_popup_buttons()
 
     def load_process_popup_position(self):
         pos = self._read_raw_config().get("process_popup_position")
