@@ -1,5 +1,5 @@
 {
-  "version": "1.17.2",
+  "version": "1.17.3",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
   "notes": "Saat Start ditekan, bot mengambil SEMUA job berstatus process/processing milik akun lewat API daftar order (limit besar, bukan 10 teratas dashboard) dan memasukkannya ke Job Proses/Catatan lengkap dengan deadline. Jika endpoint gagal, penyebabnya ditulis di log."

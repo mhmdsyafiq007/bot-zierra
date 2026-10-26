@@ -682,9 +682,7 @@ class BrowserActions:
         if (!wid) diag.push('me: id worker tidak ditemukan');
         var bases = [origin + '/api/admin/orders'];
         var out = [];
-        function fetchColl(ci) {
-            if (ci >= collections.length) return Promise.resolve();
-            var c = collections[ci];
+        function fetchColl(c) {
             function page(base, n) {
                 var u = base + '?collection=' + c + '&limit=100&page=' + n +
                         '&sort=newest' + (wid ? '&worker=' + wid : '&mine=true');
@@ -707,13 +705,15 @@ class BrowserActions:
                     return ok ? null : tryBase(bi + 1);
                 });
             }
-            return tryBase(0).then(function(){ return fetchColl(ci + 1); });
+            return tryBase(0);
         }
-        return fetchColl(0).then(function(){ cb({orders: out, diag: diag}); });
+        return Promise.all(collections.map(fetchColl)).then(function(){
+            cb({orders: out, diag: diag});
+        });
     }).catch(function(err){ cb({error: String(err)}); });
     """
 
-    def _run_authed_fetch(self, script, url, *args):
+    def _run_authed_fetch(self, script, url, *args, timeout=WAIT_TIMEOUT):
         ch = self.api
         with ch.lock:
             drv = self._ensure_driver(ch)
@@ -722,7 +722,7 @@ class BrowserActions:
             if not self._on_admin_origin(drv):
                 drv.get(target)
 
-            drv.set_script_timeout(WAIT_TIMEOUT)
+            drv.set_script_timeout(timeout)
             result = drv.execute_async_script(script, *args)
 
             if isinstance(result, dict) and result.get("status") == 401:
@@ -734,6 +734,7 @@ class BrowserActions:
                          "mencoba lagi...", "sys")
                 drv.get(target)
                 time.sleep(1.5)
+                drv.set_script_timeout(timeout)
                 result = drv.execute_async_script(script, *args)
             return result
 
@@ -861,7 +862,8 @@ class BrowserActions:
         error|None). Diagnosa endpoint yang gagal ikut di-log."""
         try:
             result = self._run_authed_fetch(
-                self.FETCH_LIST_JS, None, list(COLLECTION_FIELDS.keys()))
+                self.FETCH_LIST_JS, None, list(COLLECTION_FIELDS.keys()),
+                timeout=40)
         except Exception as exc:                  # noqa: BLE001
             return [], f"Gagal ambil daftar order: {exc}"
         err = self._check_common_errors(result, "ambil daftar order")

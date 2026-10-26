@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.2"
+APP_VERSION = "1.17.3"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2864,8 +2864,12 @@ class App(tk.Tk):
         self.log("[SYS] Pemantauan koneksi aktif.", "sys")
         # Siapkan session & tab Chrome debug sekarang, bukan saat job
         # pertama masuk, supaya popup pertama pun tidak menunggu.
-        threading.Thread(target=self.browser.warm_up, daemon=True).start()
-        threading.Thread(target=self._sync_process_jobs, daemon=True).start()
+        def _warm_then_sync():
+            # Sinkron job proses menunggu persiapan Chrome selesai dulu
+            # supaya tidak tabrakan navigasi tab (penyebab script timeout).
+            self.browser.warm_up()
+            self._sync_process_jobs()
+        threading.Thread(target=_warm_then_sync, daemon=True).start()
 
     def _sync_process_jobs(self):
         """Dipanggil tiap Start ditekan: ambil semua job berstatus
@@ -2875,6 +2879,9 @@ class App(tk.Tk):
         from datetime import datetime as _dt
         with self._sync_lock:
             found, err = self.browser.fetch_process_orders()
+            if err and "timeout" in err.lower():
+                time.sleep(2)
+                found, err = self.browser.fetch_process_orders()
             if err:
                 self._safe_log(f"[CATATAN] Sinkron job proses gagal: {err}", "err")
                 return
