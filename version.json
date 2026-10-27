@@ -1,6 +1,6 @@
 {
-  "version": "1.17.6",
+  "version": "1.17.7",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Tombol Catatan Hari Ini & Job Proses kini toggle: klik sekali membuka, klik lagi saat terbuka menutup popup. Saat popup terbuka, tombol ditandai (warna aksen penuh + titik ●)."
+  "notes": "Perbaikan tab Chrome debug yang terus bertambah: sambung-ulang sesi kini memakai ulang tab lama (tidak membuat tab baru tiap kali), tidak lagi memicu sambung-ulang untuk script timeout, dan respons HTML/404 dari server ditangani tanpa error. Pemantau Job Proses berhenti memeriksa job yang 3x gagal dan tidak lagi membuka halaman detail job."
 }

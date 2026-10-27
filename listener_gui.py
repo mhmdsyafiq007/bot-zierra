@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.6"
+APP_VERSION = "1.17.7"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2736,17 +2736,28 @@ class App(tk.Tk):
         threading.Thread(target=self._process_monitor_loop, daemon=True).start()
 
     def _process_monitor_loop(self):
+        fails = {}
         while True:
             time.sleep(60)
             try:
                 for note in list(self._active_process_jobs()):
                     jid, coll = note.get("id"), note.get("collection")
-                    if not (jid and coll):
+                    ref = note.get("ref")
+                    if not (jid and coll) or fails.get(ref, 0) >= 3:
                         continue
+                    # url=None: jalur API memakai halaman dashboard, bukan
+                    # membuka halaman detail job (yang bisa "tidak ditemukan").
                     info, _, hard_error = self.browser.fetch_order_detail(
-                        jid, coll, note.get("url"))
+                        jid, coll, None)
                     if hard_error:
+                        fails[ref] = fails.get(ref, 0) + 1
+                        if fails[ref] == 3:
+                            self._safe_log(
+                                f"[CATATAN] {ref}: 3x gagal dicek, pemantauan "
+                                "otomatis job ini dihentikan sampai aplikasi "
+                                "dibuka ulang.", "err")
                         continue
+                    fails[ref] = 0
                     st = (info.get("status") or "").strip().lower()
                     if any(w in st for w in ("done", "complete", "selesai")):
                         self.ui(self._mark_job_note_done, note.get("ref"))

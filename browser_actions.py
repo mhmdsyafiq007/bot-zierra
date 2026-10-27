@@ -259,7 +259,6 @@ class BrowserActions:
                 # sudah mati) yang BUKAN WebDriverException — tanpa ini
                 # driver mati terus dipakai & tidak pernah dibuat ulang.
                 ch.driver = None
-                ch.handle = None
 
         self._ensure_browser_up()
         try:
@@ -307,8 +306,10 @@ class BrowserActions:
         nya kelihatan seperti tab/sesi bermasalah (tertutup, invalid, dsb).
         Panggilan berikutnya ke _ensure_driver/_bind_tab otomatis membuat
         session & tab baru lagi."""
+        # handle tab SENGAJA dipertahankan: _bind_tab memakai ulang tab lama
+        # kalau masih ada, dan baru membuat tab baru kalau memang hilang
+        # (kalau ikut dibuang, tiap sambung-ulang menumpuk tab baru).
         ch.driver = None
-        ch.handle = None
 
     def _looks_recoverable(self, exc):
         """True kalau error ini kemungkinan karena tab/sesi Chrome
@@ -625,7 +626,11 @@ class BrowserActions:
           '&collection=' + collection, {
         headers: { 'Authorization': 'Bearer ' + token }
     }).then(function(r){
-        return r.json().then(function(data){ return {status: r.status, data: data}; });
+        return r.text().then(function(t){
+            var data = null;
+            try { data = JSON.parse(t); } catch (e) {}
+            return {status: r.status, data: data, nonjson: data === null};
+        });
     }).then(function(result){ cb(result); })
       .catch(function(err){ cb({error: String(err)}); });
     """
@@ -724,7 +729,8 @@ class BrowserActions:
             return self._run_authed_fetch_once(script, url, *args,
                                                timeout=timeout)
         except Exception as exc:                  # noqa: BLE001
-            if not self._looks_recoverable(exc):
+            text = str(exc).lower()
+            if "timeout" in text or not self._looks_recoverable(exc):
                 raise
             # Session/chromedriver mati (mis. Chrome debug sempat ditutup
             # atau driver terhenti) — buang session lama, sambung ulang.
@@ -800,7 +806,16 @@ class BrowserActions:
             self.log(f"[API] Gagal ambil detail: {exc}", "err")
             return info, False, True
 
+        if not isinstance(result, dict):
+            self.log("[API] Gagal ambil detail: respons kosong dari browser.",
+                     "err")
+            return info, False, True
         if self._check_common_errors(result, "ambil detail"):
+            return info, False, True
+        if result.get("nonjson") or result.get("status") == 404:
+            info["not_found"] = True
+            self.log(f"[API] Order tidak ditemukan / bukan JSON "
+                     f"(HTTP {result.get('status')}).", "err")
             return info, False, True
 
         data = result.get("data", {}) or {}
