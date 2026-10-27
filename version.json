@@ -1,6 +1,6 @@
 {
-  "version": "1.17.7",
+  "version": "1.17.8",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan tab Chrome debug yang terus bertambah: sambung-ulang sesi kini memakai ulang tab lama (tidak membuat tab baru tiap kali), tidak lagi memicu sambung-ulang untuk script timeout, dan respons HTML/404 dari server ditangani tanpa error. Pemantau Job Proses berhenti memeriksa job yang 3x gagal dan tidak lagi membuka halaman detail job."
+  "notes": "Sinkron nama worker: sebelum job dicatat ke Catatan/Job Proses (lewat polling maupun notif PAID), bot membandingkan worker di server dengan akun yang login. Kalau job ternyata atas nama worker lain (mis. Tawar/Terima tidak berlaku karena sudah diambil orang), job tidak dicatat dan log menjelaskan alasannya."
 }

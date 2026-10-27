@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.7"
+APP_VERSION = "1.17.8"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2564,6 +2564,18 @@ class App(tk.Tk):
             self.log(f"[CATATAN] Melanjutkan pemantauan {resumed} job yang "
                      "belum masuk proses.", "sys")
 
+    def _owned_by_other(self, info):
+        """True kalau detail order menunjukkan worker LAIN yang memegang
+        job ini (return nama/ID worker itu); None kalau milik kita atau
+        tidak bisa dipastikan."""
+        wid = (info or {}).get("worker_id")
+        if not wid:
+            return None
+        mine = self.browser.my_worker_id()
+        if not mine or wid == mine:
+            return None
+        return (info.get("worker_name") or wid)
+
     def _add_job_note(self, job, status_baru):
         from datetime import datetime as _dt
         ref = job.get("ref") or "-"
@@ -2797,7 +2809,22 @@ class App(tk.Tk):
             job = self.watched_jobs.get(ref)
             if not job:
                 return  # bukan job kita — abaikan
-            self._add_job_note(job, "paid")
+
+            def _verify_then_note():
+                other = None
+                if job.get("id") and job.get("collection"):
+                    info, _, hard = self.browser.fetch_order_detail(
+                        job["id"], job["collection"], None)
+                    if not hard:
+                        other = self._owned_by_other(info)
+                if other:
+                    self._safe_log(
+                        f"[CATATAN] {ref}: notif PAID tapi worker-nya {other}, "
+                        "bukan akun ini — tidak dicatat.", "err")
+                    self.ui(self._unwatch, ref)
+                else:
+                    self.ui(self._add_job_note, job, "paid")
+            threading.Thread(target=_verify_then_note, daemon=True).start()
         else:
             # *DONE* bisa datang kapan saja — kalau job ini masih di
             # watched_jobs (polling belum sempat mendeteksi "proses"
@@ -2837,12 +2864,22 @@ class App(tk.Tk):
             return
 
         status_awal = job.get("status")
-        if not status_awal:
-            info0, _, hard_error0 = self.browser.fetch_order_detail(
-                job_id, collection, url)
-            if hard_error0:
+        info0, _, hard_error0 = self.browser.fetch_order_detail(
+            job_id, collection, url)
+        if hard_error0:
+            if not status_awal:
                 return
-            status_awal = info0.get("status")
+        else:
+            other = self._owned_by_other(info0)
+            if other:
+                self._safe_log(
+                    f"[CATATAN] {ref}: job ini sekarang atas nama worker "
+                    f"{other}, bukan akun ini — Terima/Tawar tidak berlaku, "
+                    "pemantauan dihentikan.", "err")
+                self.ui(self._unwatch, ref)
+                return
+            if not status_awal:
+                status_awal = info0.get("status")
 
         def _norm(s):
             return (s or "").strip().lower().replace("_", "-")
@@ -2882,6 +2919,14 @@ class App(tk.Tk):
                        ("cancel", "reject", "refund", "fail")):
                     self._unwatch(ref)
                     return
+            other = self._owned_by_other(info)
+            if other:
+                self._safe_log(
+                    f"[CATATAN] {ref}: status berubah ({status_baru}) tapi "
+                    f"worker-nya {other}, bukan akun ini — tidak dicatat.",
+                    "err")
+                self.ui(self._unwatch, ref)
+                return
             if norm_baru != _norm(status_awal):
                 # Berubah jadi status lain (bukan waiting-payment/expired) —
                 # ini yang dianggap "masuk proses".

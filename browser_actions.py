@@ -635,6 +635,16 @@ class BrowserActions:
       .catch(function(err){ cb({error: String(err)}); });
     """
 
+    FETCH_ME_JS = """
+    var cb = arguments[arguments.length - 1];
+    var token = localStorage.getItem('adminToken');
+    if (!token) { cb({error: 'no-token'}); return; }
+    try {
+        var pl = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        cb({id: pl.id || pl._id || null, username: pl.username || pl.name || null});
+    } catch (e) { cb({error: String(e)}); }
+    """
+
     FETCH_CONFIRM_JS = """
     var cb = arguments[arguments.length - 1];
     var ref = arguments[0];
@@ -861,6 +871,12 @@ class BrowserActions:
         info["deadline"] = _format_deadline(deadline_raw) if deadline_raw else "-"
         info["ref"] = order.get("ref")
         info["status"] = str(pick("status") or "-")
+        w = order.get("worker") if isinstance(order, dict) else None
+        if isinstance(w, dict):
+            info["worker_id"] = str(w.get("_id") or w.get("id") or "") or None
+            info["worker_name"] = w.get("name") or w.get("username")
+        elif isinstance(w, str) and w:
+            info["worker_id"], info["worker_name"] = w, None
         info["jenis"] = spec["jenis"]
         info["harga_client_raw"] = harga_client_raw
         info["harga_estimasi_raw"] = harga_estimasi_raw
@@ -891,6 +907,19 @@ class BrowserActions:
                      f"Key yang tersedia: {keys}", "err")
 
         return info, complete, False
+
+    def my_worker_id(self):
+        """ID worker akun yang sedang login (dari token), di-cache. None
+        kalau belum bisa dibaca."""
+        if getattr(self, "_my_worker_id", None):
+            return self._my_worker_id
+        try:
+            res = self._run_authed_fetch(self.FETCH_ME_JS, None)
+        except Exception:                          # noqa: BLE001
+            return None
+        if isinstance(res, dict) and res.get("id"):
+            self._my_worker_id = str(res["id"])
+        return getattr(self, "_my_worker_id", None)
 
     def fetch_process_orders(self):
         """Semua order berstatus process/processing milik worker yang login
