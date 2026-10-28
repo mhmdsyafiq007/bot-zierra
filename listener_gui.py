@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.9"
+APP_VERSION = "1.17.10"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2391,6 +2391,23 @@ class App(tk.Tk):
         mark = "● " if self._popup_open("notes_popup") else ""
         return f"{mark}Catatan Hari Ini ({len(self.job_notes_list)})"
 
+    def _entry_url(self, note):
+        """URL detail job: pakai yang tersimpan; kalau kosong (job hasil
+        sinkron) susun dari id + koleksi untuk jenis yang polanya pasti."""
+        if note.get("url"):
+            return note["url"]
+        jid = note.get("id")
+        slug = {"parafrases": "detail-parafrase",
+                "humanizers": "detail-humanizer"}.get(note.get("collection"))
+        if jid and slug:
+            return f"https://admin.kawalu.id/admin/{slug}/{jid}"
+        return ""
+
+    def _open_in_debug(self, url):
+        """Buka detail job di tab Chrome debug (bukan browser lain)."""
+        threading.Thread(target=self.browser.open_job, args=(url,),
+                         daemon=True).start()
+
     def _popup_open(self, attr):
         w = getattr(self, attr, None)
         try:
@@ -2485,11 +2502,11 @@ class App(tk.Tk):
                     btn_col, "Hapus", lambda idx=i: self.remove_job_note(idx),
                     width=60, height=26, fill=RED, bg=FIELD,
                 ).pack(side="right")
-                url = note.get("url")
+                url = self._entry_url(note)
                 if url:
                     RoundedButton(
                         btn_col, "Buka Detail",
-                        lambda u=url: webbrowser.open(u),
+                        lambda u=url: self._open_in_debug(u),
                         width=90, height=26, fill=ACCENT, bg=FIELD,
                     ).pack(side="right", padx=(0, 6))
 
@@ -2705,10 +2722,10 @@ class App(tk.Tk):
                      bg=FIELD, fg=MUTED, font=(FONT, 8)).pack(side="left")
             tk.Label(line, text=rem_txt, bg=FIELD, fg=rem_color,
                      font=(FONT, 8, "bold")).pack(side="left")
-            url = note.get("url")
+            url = self._entry_url(note)
             if url:
                 RoundedButton(item, "Buka Detail",
-                              lambda u=url: webbrowser.open(u),
+                              lambda u=url: self._open_in_debug(u),
                               width=90, height=26, fill=ACCENT, bg=FIELD
                               ).pack(side="right")
 

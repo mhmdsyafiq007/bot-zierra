@@ -1,6 +1,6 @@
 {
-  "version": "1.17.9",
+  "version": "1.17.10",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan: popup Catatan & Job Proses yang sedang terbuka tidak lagi tiba-tiba loncat ke depan. Pembaruan otomatis (timer 30 detik, pemantau, sinkron) kini hanya mengganti isi di jendela yang sama, tidak membuat jendela baru."
+  "notes": "Tombol \"Buka Detail\" di popup Catatan & Job Proses kini membuka link di tab Chrome debug (bukan browser/Chrome lain). Job hasil sinkron (Parafrase/Humanizer) juga punya tombol Buka Detail."
 }
