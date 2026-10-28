@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.8"
+APP_VERSION = "1.17.9"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2427,17 +2427,21 @@ class App(tk.Tk):
         terakhir diingat sama seperti popup job masuk. Dibangun ulang
         total tiap dipanggil (daftar catatan biasanya kecil) supaya tidak
         perlu logika update-di-tempat yang rumit."""
-        if getattr(self, "notes_popup", None) and self.notes_popup.winfo_exists():
-            self.notes_popup.destroy()
-
-        win = tk.Toplevel(self, bg=CARD)
-        win.title("Catatan Hari Ini")
-        win.configure(bg=CARD)
-        self.notes_popup = win
-        if self.notes_popup_position:
-            win.geometry(f"+{self.notes_popup_position[0]}+{self.notes_popup_position[1]}")
-        win.bind("<Configure>", self._on_notes_popup_move)
-        win.bind("<Destroy>", self._on_notes_popup_destroyed)
+        if self._popup_open("notes_popup"):
+            # Sudah terbuka: perbarui ISI saja di jendela yang sama —
+            # jendela tidak dibuat ulang, jadi tidak loncat ke depan.
+            win = self.notes_popup
+            for child in win.winfo_children():
+                child.destroy()
+        else:
+            win = tk.Toplevel(self, bg=CARD)
+            win.title("Catatan Hari Ini")
+            win.configure(bg=CARD)
+            self.notes_popup = win
+            if self.notes_popup_position:
+                win.geometry(f"+{self.notes_popup_position[0]}+{self.notes_popup_position[1]}")
+            win.bind("<Configure>", self._on_notes_popup_move)
+            win.bind("<Destroy>", self._on_notes_popup_destroyed)
         self._sync_popup_buttons()
 
         pad = tk.Frame(win, bg=CARD, padx=16, pady=14)
@@ -2653,18 +2657,19 @@ class App(tk.Tk):
         return f"sisa {txt}", (AMBER if left < 6 * 3600 else GREEN)
 
     def show_process_popup(self):
-        if getattr(self, "process_popup", None) and self.process_popup.winfo_exists():
-            self.process_popup.destroy()
-        self._refresh_process_badge()
-
-        win = tk.Toplevel(self, bg=CARD)
-        win.title("Job Proses")
-        win.configure(bg=CARD)
-        self.process_popup = win
-        if self.process_popup_position:
-            win.geometry(f"+{self.process_popup_position[0]}+{self.process_popup_position[1]}")
-        win.bind("<Configure>", self._on_process_popup_move)
-        win.bind("<Destroy>", self._on_process_popup_destroyed)
+        if self._popup_open("process_popup"):
+            win = self.process_popup
+            for child in win.winfo_children():
+                child.destroy()
+        else:
+            win = tk.Toplevel(self, bg=CARD)
+            win.title("Job Proses")
+            win.configure(bg=CARD)
+            self.process_popup = win
+            if self.process_popup_position:
+                win.geometry(f"+{self.process_popup_position[0]}+{self.process_popup_position[1]}")
+            win.bind("<Configure>", self._on_process_popup_move)
+            win.bind("<Destroy>", self._on_process_popup_destroyed)
         self._sync_popup_buttons()
 
         pad = tk.Frame(win, bg=CARD, padx=16, pady=14)

@@ -1,6 +1,6 @@
 {
-  "version": "1.17.8",
+  "version": "1.17.9",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Sinkron nama worker: sebelum job dicatat ke Catatan/Job Proses (lewat polling maupun notif PAID), bot membandingkan worker di server dengan akun yang login. Kalau job ternyata atas nama worker lain (mis. Tawar/Terima tidak berlaku karena sudah diambil orang), job tidak dicatat dan log menjelaskan alasannya."
+  "notes": "Perbaikan: popup Catatan & Job Proses yang sedang terbuka tidak lagi tiba-tiba loncat ke depan. Pembaruan otomatis (timer 30 detik, pemantau, sinkron) kini hanya mengganti isi di jendela yang sama, tidak membuat jendela baru."
 }
