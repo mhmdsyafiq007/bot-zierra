@@ -1,6 +1,6 @@
 {
-  "version": "1.17.10",
+  "version": "1.17.11",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Tombol \"Buka Detail\" di popup Catatan & Job Proses kini membuka link di tab Chrome debug (bukan browser/Chrome lain). Job hasil sinkron (Parafrase/Humanizer) juga punya tombol Buka Detail."
+  "notes": "Opsi baru di panel Auto Tawar: \"Tawaran ditolak -> langsung Terima (abaikan syarat)\". Saat pesan REJECT NEGO masuk, bot mencoba Terima berulang tiap ~0.35 detik (tanpa cek syarat/delay, tanpa menunggu polling detail) sampai berhasil atau 45 detik, supaya tidak keduluan worker lain. Klik Simpan untuk menerapkan."
 }

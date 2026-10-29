@@ -943,7 +943,7 @@ class BrowserActions:
                 found.append(o)
         return found, None
 
-    def confirm_via_api(self, ref, collection, url=None, _retry=True):
+    def confirm_via_api(self, ref, collection, url=None, _retry=True, quiet=False):
         """Terima job langsung lewat API — satu request POST, tanpa klik
         dan tanpa menunggu render. Return (berhasil, pesan). _retry=True
         -> kalau gagal karena tab/sesi jalur api bermasalah, tab dibuka
@@ -959,7 +959,8 @@ class BrowserActions:
                 self.log(f"[API] Tab/sesi bermasalah ({exc}) — membuka ulang "
                          "tab & mencoba sekali lagi...", "err")
                 self._reset_channel(self.api)
-                return self.confirm_via_api(ref, collection, url, _retry=False)
+                return self.confirm_via_api(ref, collection, url, _retry=False,
+                                            quiet=quiet)
             msg = f"Gagal Terima: {exc}"
             self.log(f"[API] {msg}", "err")
             return False, str(exc)
@@ -975,5 +976,6 @@ class BrowserActions:
             return True, msg
         else:
             msg = str(data.get("message", data))
-            self.log(f"[API] Ditolak server: {msg}", "err")
+            if not quiet:
+                self.log(f"[API] Ditolak server: {msg}", "err")
             return False, msg

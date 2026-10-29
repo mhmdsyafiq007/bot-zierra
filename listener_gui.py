@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.10"
+APP_VERSION = "1.17.11"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -302,6 +302,14 @@ TIP_AUTO_TAWAR = (
     "Kalau aktif, job yang memenuhi syarat Auto Tawar di bawah ditawar "
     "otomatis setelah jeda acak (Delay). Auto Tawar dicek lebih dulu "
     "daripada Auto Terima; satu job hanya memicu satu aksi otomatis."
+)
+TIP_REJECT_FORCE = (
+    "Kalau tawaran kita ditolak client (pesan REJECT NEGO), job kembali "
+    "waiting-confirmation dan diperebutkan semua worker. Dengan opsi ini bot "
+    "langsung mencoba Terima berulang-ulang secepat mungkin, TANPA mengecek "
+    "syarat Auto Terima dan tanpa delay — job diterima di harga client "
+    "aslinya. Risiko: job di bawah harga minimummu ikut diterima. Berlaku "
+    "walau Auto Terima nonaktif. Klik Simpan untuk menerapkan."
 )
 TIP_TARGET_TAWAR = (
     "Harga tawar dihitung sebagai persentase dari Harga Estimasi (boleh "
@@ -577,6 +585,8 @@ class App(tk.Tk):
         # kurang bagus harganya tapi masih worth ditawar.
         auto_tawar = self.load_auto_tawar_settings()
         self.auto_tawar_enabled = auto_tawar["enabled"]
+        self.reject_force_accept = bool(
+            self._read_raw_config().get("reject_force_accept", False))
         self.auto_tawar_delay_min_ms = auto_tawar["delay_min_ms"]
         self.auto_tawar_delay_max_ms = auto_tawar["delay_max_ms"]
         self.auto_tawar_jenis_settings = auto_tawar["jenis_settings"]
@@ -2049,6 +2059,17 @@ class App(tk.Tk):
         ).pack(side="left")
         InfoTip(toggle_row, TIP_AUTO_TAWAR).pack(side="left", padx=(0, 10))
 
+        self.reject_force_var = tk.BooleanVar(value=self.reject_force_accept)
+        force_row = tk.Frame(panel, bg=CARD)
+        force_row.grid(row=60, column=0, sticky="w", pady=(8, 0))
+        tk.Checkbutton(
+            force_row, text="Tawaran ditolak -> langsung Terima (abaikan syarat)",
+            variable=self.reject_force_var,
+            bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
+            activeforeground=TEXT, font=(FONT, 9), anchor="w",
+        ).pack(side="left")
+        InfoTip(force_row, TIP_REJECT_FORCE).pack(side="left", padx=(4, 0))
+
         self.auto_tawar_delay_box = tk.Frame(toggle_row, bg=CARD)
 
         lbl_delay_tawar = tk.Label(self.auto_tawar_delay_box, text="Delay (ms)",
@@ -2259,6 +2280,7 @@ class App(tk.Tk):
 
         try:
             self.auto_tawar_enabled = bool(self.auto_tawar_enabled_var.get())
+            self.reject_force_accept = bool(self.reject_force_var.get())
             self.auto_tawar_delay_min_ms = float(
                 self.e_auto_tawar_delay_min.get().strip() or 0)
             self.auto_tawar_delay_max_ms = float(
@@ -3279,6 +3301,7 @@ class App(tk.Tk):
     def save_auto_tawar_settings(self):
         data = self._read_raw_config()
         data["auto_tawar_enabled"] = self.auto_tawar_enabled
+        data["reject_force_accept"] = self.reject_force_accept
         data["auto_tawar_delay_min_ms"] = self.auto_tawar_delay_min_ms
         data["auto_tawar_delay_max_ms"] = self.auto_tawar_delay_max_ms
         data["auto_tawar_jenis_settings"] = self.auto_tawar_jenis_settings
@@ -4354,7 +4377,7 @@ class App(tk.Tk):
             self.log("[REJECT] Pesan REJECT NEGO masuk tapi Ref tidak "
                      "terbaca: " + text[:120].replace("\n", " | "), "err")
             return
-        if not self.auto_enabled:
+        if not (self.auto_enabled or self.reject_force_accept):
             self.log(f"[REJECT] Tawaran {ref} ditolak client (Auto Terima "
                      "nonaktif — dilewati).", "skip")
             return
@@ -4379,8 +4402,48 @@ class App(tk.Tk):
             args=(ref, job_id, collection, url), daemon=True,
         ).start()
 
+    def _reject_fast_accept(self, ref, job_id, collection, url):
+        """Tawaran ditolak -> langsung coba Terima berulang (tiap ~0.35 dtk)
+        TANPA cek syarat & tanpa delay, sampai server menerima (status
+        sudah kembali waiting-confirmation) atau 45 detik. Lebih cepat
+        daripada menunggu status lewat polling detail, karena job yang
+        kembali waiting-confirmation diperebutkan semua worker."""
+        end = time.time() + 45
+        attempts = 0
+        while time.time() < end:
+            if self.is_paused and not self.reject_force_accept:
+                return
+            attempts += 1
+            ok, msg = self.browser.confirm_via_api(
+                ref, collection, url, quiet=True)
+            if ok:
+                self.ui(self.log, f"[REJECT] {ref}: berhasil di-Terima "
+                                  f"(percobaan ke-{attempts}).", "hit")
+                snapshot = {"ref": ref, "id": job_id,
+                            "collection": collection, "url": url,
+                            "jenis": None, "status": None}
+                self.ui(self._show_result_alert, True, msg)
+                threading.Thread(target=self._watch_job_status,
+                                 args=(snapshot,), daemon=True).start()
+                return
+            low = (msg or "").lower()
+            if "status" in low and "sesuai" in low:
+                time.sleep(0.35)   # belum waiting-confirmation, ulangi
+                continue
+            self.ui(self.log, f"[REJECT] {ref}: Terima ditolak server: {msg} "
+                              "— berhenti mencoba.", "err")
+            return
+        self.ui(self.log, f"[REJECT] {ref}: status tidak kembali "
+                          "waiting-confirmation dalam 45 detik — dilewati.",
+                "skip")
+
     def _reject_nego_worker(self, ref, job_id, collection, url):
         try:
+            if self.reject_force_accept:
+                self.ui(self.log, f"[REJECT] {ref}: mode langsung Terima "
+                                  "aktif — mencoba Terima berulang...", "sys")
+                self._reject_fast_accept(ref, job_id, collection, url)
+                return
             deadline = time.time() + 60
             info = None
             while time.time() < deadline:
