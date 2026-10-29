@@ -1,6 +1,6 @@
 {
-  "version": "1.17.11",
+  "version": "1.17.12",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Opsi baru di panel Auto Tawar: \"Tawaran ditolak -> langsung Terima (abaikan syarat)\". Saat pesan REJECT NEGO masuk, bot mencoba Terima berulang tiap ~0.35 detik (tanpa cek syarat/delay, tanpa menunggu polling detail) sampai berhasil atau 45 detik, supaya tidak keduluan worker lain. Klik Simpan untuk menerapkan."
+  "notes": "Opsi \"Tawaran ditolak -> langsung Terima (abaikan syarat)\" dihapus: job yang tawarannya ditolak selalu dicek syarat Auto Terima dulu sebelum diterima."
 }
