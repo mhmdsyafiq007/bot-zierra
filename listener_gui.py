@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.12"
+APP_VERSION = "1.17.13"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -310,10 +310,12 @@ TIP_TARGET_TAWAR = (
     "Apa pun metodenya, harga tawar tidak pernah di bawah Harga Client."
 )
 TIP_RANGE = (
-    "Kalau Harga Estimasi job berada di antara Harga Min dan Max, dasar "
-    "persentase dinaikkan menjadi Harga Max. Jadi persentase di atas 100% "
-    "menjamin tawar di atas Harga Max. Contoh: rentang 60.000-100.000, "
-    "estimasi 67.000, persentase 120% -> 100.000 x 120% = 120.000."
+    "Kalau Harga Estimasi job berada di antara Harga Min dan Max, tawar = "
+    "Harga Estimasi x persentase, dengan dasar minimal (kolom paling kanan, "
+    "kosongkan kalau tidak perlu). Contoh: dasar minimal 60.000, persentase "
+    "128%: estimasi 59.455 -> 60.000 x 128% = 76.000; estimasi 80.000 -> "
+    "80.000 x 128% = 102.000. Estimasi di luar rentang Min-Max tidak "
+    "memakai ini (lihat opsi \"Di luar rentang\")."
 )
 TIP_DEFAULT_FLOOR = (
     "Pengaturan tawar default: kalau Harga Estimasi DAN Harga Client sama-sama "
@@ -1926,9 +1928,17 @@ class App(tk.Tk):
                               width=9, font=(FONT, 10), insertbackground=ACCENT)
         rmax_entry.insert(0, "" if rmax_val is None else str(rmax_val))
         rmax_entry.pack(side="left", ipady=3)
-        tk.Label(range_wrap, text="Rp (dasar % = Harga Max)",
+        tk.Label(range_wrap, text="Rp  ·  dasar % = Harga Estimasi, minimal",
                  bg=CARD, fg=MUTED, font=(FONT, 8)).pack(
-            side="left", padx=(4, 0))
+            side="left", padx=(4, 4))
+        base_val = settings.get("price_base_min")
+        base_entry = tk.Entry(range_wrap, bg=FIELD, fg=TEXT, relief="flat",
+                              width=9, font=(FONT, 10), insertbackground=ACCENT)
+        base_entry.insert(0, "" if base_val is None else str(base_val))
+        base_entry.pack(side="left", ipady=3)
+        tk.Label(range_wrap, text="Rp", bg=CARD, fg=MUTED,
+                 font=(FONT, 8)).pack(side="left", padx=(4, 0))
+        self.auto_tawar_base_entries[jenis] = base_entry
         self.auto_tawar_range_min_entries[jenis] = rmin_entry
         self.auto_tawar_range_max_entries[jenis] = rmax_entry
         self.auto_tawar_range_wraps[jenis] = range_wrap
@@ -2116,6 +2126,7 @@ class App(tk.Tk):
         self.auto_tawar_use_range_vars = {}
         self.auto_tawar_range_min_entries = {}
         self.auto_tawar_range_max_entries = {}
+        self.auto_tawar_base_entries = {}
         self.auto_tawar_range_wraps = {}
         self.auto_tawar_range_rows = {}
         self.auto_tawar_outside_vars = {}
@@ -2279,6 +2290,8 @@ class App(tk.Tk):
                                        allow_blank=True)
                 price_range_max = read(self.auto_tawar_range_max_entries[jenis],
                                        allow_blank=True)
+                price_base_min = read(self.auto_tawar_base_entries[jenis],
+                                      allow_blank=True)
                 outside_range_default = bool(
                     self.auto_tawar_outside_vars[jenis].get())
                 use_default_floor = bool(self.auto_tawar_floor_vars[jenis].get())
@@ -2308,6 +2321,7 @@ class App(tk.Tk):
                         "use_price_range": use_price_range,
                         "price_range_min": price_range_min,
                         "price_range_max": price_range_max,
+                        "price_base_min": price_base_min,
                         "outside_range_default": outside_range_default,
                         "use_default_floor": use_default_floor,
                         "default_floor_price": default_floor_price,
@@ -2328,6 +2342,7 @@ class App(tk.Tk):
                         "use_price_range": use_price_range,
                         "price_range_min": price_range_min,
                         "price_range_max": price_range_max,
+                        "price_base_min": price_base_min,
                         "outside_range_default": outside_range_default,
                         "use_default_floor": use_default_floor,
                         "default_floor_price": default_floor_price,
@@ -3243,7 +3258,8 @@ class App(tk.Tk):
             "max_client_pct": 70, "deadline_min_h": 2, "deadline_max_h": 48,
             "use_target_tawar": False, "target_tawar_pct": None,
             "use_price_range": False, "price_range_min": None,
-            "price_range_max": None, "outside_range_default": False,
+            "price_range_max": None, "price_base_min": 60000,
+            "outside_range_default": False,
             "use_default_floor": False, "default_floor_price": 100000,
         }
         humanizer_defaults = {
@@ -3252,7 +3268,8 @@ class App(tk.Tk):
             "min_word_count": None, "max_word_count": 3000,
             "use_target_tawar": False, "target_tawar_pct": None,
             "use_price_range": False, "price_range_min": None,
-            "price_range_max": None, "outside_range_default": False,
+            "price_range_max": None, "price_base_min": 60000,
+            "outside_range_default": False,
             "use_default_floor": False, "default_floor_price": 100000,
         }
         fixfile_defaults = {
@@ -3261,7 +3278,8 @@ class App(tk.Tk):
             "service_include": [], "service_exclude": [],
             "use_target_tawar": False, "target_tawar_pct": None,
             "use_price_range": False, "price_range_min": None,
-            "price_range_max": None, "outside_range_default": False,
+            "price_range_max": None, "price_base_min": 60000,
+            "outside_range_default": False,
             "use_default_floor": False, "default_floor_price": 100000,
         }
 
@@ -3883,12 +3901,21 @@ class App(tk.Tk):
                                  and rmin not in (None, "")
                                  and rmax not in (None, ""))
                     if use_range and float(rmin) <= estimasi <= float(rmax):
-                        harga_tawar = compute_tawar_price_from_client(
-                            float(rmax), pct)
+                        # Dasar = Harga Estimasi, tapi tidak kurang dari
+                        # "dasar minimal" (mis. 60rb): estimasi di bawah
+                        # itu dihitung dari angka minimalnya.
+                        base_min = jenis_settings.get("price_base_min")
+                        try:
+                            base_min = float(base_min) if base_min not in (None, "") else 0.0
+                        except (TypeError, ValueError):
+                            base_min = 0.0
+                        dasar = max(estimasi, base_min)
+                        harga_tawar = compute_tawar_price_from_client(dasar, pct)
                         self._safe_log(
                             f"[TAWAR] Estimasi Rp{int(estimasi)} di dalam "
-                            f"rentang — dasar Rp{int(float(rmax))} x {pct}%",
-                            "sys")
+                            f"rentang — dasar Rp{int(dasar)}"
+                            f"{' (minimal)' if dasar > estimasi else ''}"
+                            f" x {pct}%", "sys")
                     elif use_range and jenis_settings.get("outside_range_default"):
                         harga_tawar = None
                         self._safe_log(

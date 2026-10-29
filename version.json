@@ -1,6 +1,6 @@
 {
-  "version": "1.17.12",
+  "version": "1.17.13",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Opsi \"Tawaran ditolak -> langsung Terima (abaikan syarat)\" dihapus: job yang tawarannya ditolak selalu dicek syarat Auto Terima dulu sebelum diterima."
+  "notes": "Tawar Rentang Harga: dasar persentase kini Harga Estimasi (bukan Harga Max), dengan kolom \"dasar minimal\" (default 60.000). Contoh 128%: estimasi 59.455 -> 60.000 x 128% = 76.000; estimasi 80.000 -> 102.000. Rentang Min-Max tetap jadi batas job mana yang memakai aturan ini."
 }
