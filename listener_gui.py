@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.14"
+APP_VERSION = "1.17.15"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -316,6 +316,21 @@ TIP_RANGE = (
     "128%: estimasi 59.455 -> 60.000 x 128% = 76.000; estimasi 80.000 -> "
     "80.000 x 128% = 102.000. Estimasi di luar rentang Min-Max tidak "
     "memakai ini (lihat opsi \"Di luar rentang\")."
+)
+TIP_RANGE_MIN = (
+    "Batas BAWAH rentang. Job hanya memakai rumus Tawar Rentang Harga kalau "
+    "Harga Estimasi-nya >= angka ini. Di bawahnya dianggap di luar rentang."
+)
+TIP_RANGE_MAX = (
+    "Batas ATAS rentang. Job hanya memakai rumus Tawar Rentang Harga kalau "
+    "Harga Estimasi-nya <= angka ini. Di atasnya dianggap di luar rentang "
+    "(lihat opsi \"Di luar rentang: tawar default\")."
+)
+TIP_RANGE_BASE = (
+    "Dasar perhitungan persentase = Harga Estimasi, tapi tidak boleh kurang "
+    "dari angka ini. Contoh: dasar minimal 60.000, persentase 128%: estimasi "
+    "50.000 -> 60.000 x 128% = 76.000; estimasi 80.000 -> 80.000 x 128% = "
+    "102.000. Kosongkan kalau tidak mau ada minimal."
 )
 TIP_DEFAULT_FLOOR = (
     "Pengaturan tawar default: kalau Harga Estimasi DAN Harga Client sama-sama "
@@ -1908,44 +1923,47 @@ class App(tk.Tk):
 
         range_var = tk.BooleanVar(value=bool(settings.get("use_price_range")))
         self.auto_tawar_use_range_vars[jenis] = range_var
+        range_head = tk.Frame(range_row, bg=CARD)
+        range_head.pack(anchor="w")
         tk.Checkbutton(
-            range_row, text="Tawar Rentang Harga",
+            range_head, text="Tawar Rentang Harga",
             variable=range_var,
             command=lambda j=jenis: self._refresh_price_range_field(j),
             bg=CARD, fg=TEXT, selectcolor=FIELD, activebackground=CARD,
             activeforeground=TEXT, font=(FONT, 8), anchor="w",
         ).pack(side="left")
-        InfoTip(range_row, TIP_RANGE).pack(side="left", padx=(2, 0))
+        InfoTip(range_head, TIP_RANGE).pack(side="left", padx=(2, 0))
 
+        # Tiga isian rentang di baris SENDIRI di bawah checkbox (bukan
+        # sebelah kanan) supaya tidak terpotong saat jendela diperkecil;
+        # tiap isian punya judul + penjelasan saat di-hover.
         range_wrap = tk.Frame(range_row, bg=CARD)
-        rmin_val = settings.get("price_range_min")
-        rmin_entry = tk.Entry(range_wrap, bg=FIELD, fg=TEXT, relief="flat",
-                              width=9, font=(FONT, 10), insertbackground=ACCENT)
-        rmin_entry.insert(0, "" if rmin_val is None else str(rmin_val))
-        rmin_entry.pack(side="left", ipady=3)
-        tk.Label(range_wrap, text="-", bg=CARD, fg=MUTED,
-                 font=(FONT, 9)).pack(side="left", padx=4)
-        rmax_val = settings.get("price_range_max")
-        rmax_entry = tk.Entry(range_wrap, bg=FIELD, fg=TEXT, relief="flat",
-                              width=9, font=(FONT, 10), insertbackground=ACCENT)
-        rmax_entry.insert(0, "" if rmax_val is None else str(rmax_val))
-        rmax_entry.pack(side="left", ipady=3)
-        tk.Label(range_wrap, text="Rp  ·  dasar % = Harga Estimasi, minimal",
-                 bg=CARD, fg=MUTED, font=(FONT, 8)).pack(
-            side="left", padx=(4, 4))
-        base_val = settings.get("price_base_min")
-        base_entry = tk.Entry(range_wrap, bg=FIELD, fg=TEXT, relief="flat",
-                              width=9, font=(FONT, 10), insertbackground=ACCENT)
-        base_entry.insert(0, "" if base_val is None else str(base_val))
-        base_entry.pack(side="left", ipady=3)
-        tk.Label(range_wrap, text="Rp", bg=CARD, fg=MUTED,
-                 font=(FONT, 8)).pack(side="left", padx=(4, 0))
+
+        def _range_field(col, title, tip, value):
+            box = tk.Frame(range_wrap, bg=CARD)
+            box.grid(row=0, column=col, sticky="w", padx=(0, 10))
+            lbl = tk.Label(box, text=title, bg=CARD, fg=MUTED,
+                           font=(FONT, 7, "bold"), anchor="w")
+            lbl.pack(anchor="w", pady=(0, 3))
+            HoverTip(lbl, tip)
+            ent = tk.Entry(box, bg=FIELD, fg=TEXT, relief="flat", width=10,
+                           font=(FONT, 10), insertbackground=ACCENT)
+            ent.insert(0, "" if value is None else str(value))
+            ent.pack(ipady=3)
+            return ent
+
+        rmin_entry = _range_field(0, "HARGA MIN (RP)", TIP_RANGE_MIN,
+                                  settings.get("price_range_min"))
+        rmax_entry = _range_field(1, "HARGA MAX (RP)", TIP_RANGE_MAX,
+                                  settings.get("price_range_max"))
+        base_entry = _range_field(2, "DASAR MINIMAL (RP)", TIP_RANGE_BASE,
+                                  settings.get("price_base_min"))
         self.auto_tawar_base_entries[jenis] = base_entry
         self.auto_tawar_range_min_entries[jenis] = rmin_entry
         self.auto_tawar_range_max_entries[jenis] = rmax_entry
         self.auto_tawar_range_wraps[jenis] = range_wrap
         if range_var.get():
-            range_wrap.pack(side="left", padx=(10, 0))
+            range_wrap.pack(anchor="w", padx=(22, 0), pady=(4, 0))
 
         # --- baris ketiga: perilaku DI LUAR rentang (nested di bawah) ---
         outside_row = tk.Frame(sub, bg=CARD)
@@ -2012,7 +2030,7 @@ class App(tk.Tk):
             wrap.pack_forget()
 
         if range_on:
-            range_wrap.pack(side="left", padx=(10, 0))
+            range_wrap.pack(anchor="w", padx=(22, 0), pady=(4, 0))
         else:
             range_wrap.pack_forget()
 

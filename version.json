@@ -1,6 +1,6 @@
 {
-  "version": "1.17.14",
+  "version": "1.17.15",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Auto Tawar: syarat Client Max (%) kini hanya berlaku bila Harga Client lebih rendah dari Harga Estimasi. Kalau Harga Client sama atau lebih tinggi dari estimasi, syarat ini langsung lolos."
+  "notes": "Tawar Rentang Harga: tiga isian (Harga Min, Harga Max, Dasar Minimal) dipindah ke baris sendiri di bawah checkbox sehingga tidak terpotong saat jendela diperkecil, masing-masing dengan judul dan penjelasan saat di-hover."
 }
