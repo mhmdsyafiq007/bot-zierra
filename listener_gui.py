@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.13"
+APP_VERSION = "1.17.14"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -381,7 +381,9 @@ TIPS_TAWAR = {
     "max_client_pct": "Perbandingan Harga Client dengan Harga Estimasi "
                       "(Client / Estimasi x 100). Job hanya ditawar kalau "
                       "persentasenya DI BAWAH angka ini. Contoh: 79 berarti "
-                      "harga client harus kurang dari 79% estimasi.",
+                      "harga client harus kurang dari 79% estimasi. Kalau Harga Client "
+                      "sama atau lebih tinggi dari Harga Estimasi, syarat ini "
+                      "langsung lolos.",
     "deadline_min_h": _TIP_DEADLINE_MIN,
     "deadline_max_h": _TIP_DEADLINE_MAX,
     "min_word_count": _TIP_WORD_MIN,
@@ -4278,7 +4280,10 @@ class App(tk.Tk):
 
         # Syarat harga (semua jenis): client harus DI BAWAH persentase ini.
         max_client_pct = settings.get("max_client_pct")
-        if max_client_pct not in (None, "") and (client / estimasi) * 100 >= float(max_client_pct):
+        # Hanya berlaku kalau Harga Client LEBIH RENDAH dari Harga Estimasi;
+        # client >= estimasi langsung dianggap lolos syarat harga ini.
+        if (client < estimasi and max_client_pct not in (None, "")
+                and (client / estimasi) * 100 >= float(max_client_pct)):
             return False
 
         # Syarat deadline (semua jenis) — sama seperti Auto Terima.
