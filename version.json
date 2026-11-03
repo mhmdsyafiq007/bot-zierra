@@ -1,6 +1,6 @@
 {
-  "version": "1.17.15",
+  "version": "1.17.16",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Tawar Rentang Harga: tiga isian (Harga Min, Harga Max, Dasar Minimal) dipindah ke baris sendiri di bawah checkbox sehingga tidak terpotong saat jendela diperkecil, masing-masing dengan judul dan penjelasan saat di-hover."
+  "notes": "Penjelasan (hover) semua field & opsi Auto Terima/Auto Tawar diperjelas dan disertai contoh perhitungan: syarat target, client %, harga client, deadline, kata, persentase tawar, rentang harga (min/max/dasar minimal), di luar rentang, dan tawar default minimal."
 }

@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.15"
+APP_VERSION = "1.17.16"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -292,58 +292,47 @@ class Field(tk.Frame):
 
 
 TIP_AUTO_TERIMA = (
-    "Kalau aktif, job yang masuk dan memenuhi syarat di bawah di-Terima "
-    "otomatis setelah jeda acak (Delay). Auto Tawar dicek lebih dulu; Auto "
-    "Terima jadi cadangan kalau job tidak ditawar. Kalau tawaran ditolak "
-    "client (pesan REJECT NEGO) dan status kembali waiting-confirmation, "
-    "job yang memenuhi syarat ini juga langsung di-Terima."
+    'Kalau aktif, job baru yang memenuhi SEMUA syarat di bawah di-Terima otomatis setelah jeda acak (Delay). '
+    'Auto Tawar dicek lebih dulu; Auto Terima jadi cadangan kalau job tidak ditawar. '
+    'Tawaran yang ditolak client (pesan REJECT NEGO) dan kembali waiting-confirmation juga langsung di-Terima kalau memenuhi syarat ini. '
+    'Contoh: syarat Target min 17, Client min 74%, Harga Client min 70.000. Job dengan Target 20, client 80.000, estimasi 100.000 (80%) -> diterima. Job client 60.000 -> dilewati (di bawah 70.000).'
 )
 TIP_AUTO_TAWAR = (
-    "Kalau aktif, job yang memenuhi syarat Auto Tawar di bawah ditawar "
-    "otomatis setelah jeda acak (Delay). Auto Tawar dicek lebih dulu "
-    "daripada Auto Terima; satu job hanya memicu satu aksi otomatis."
+    'Kalau aktif, job baru yang memenuhi SEMUA syarat Auto Tawar di bawah ditawar otomatis setelah jeda acak (Delay). '
+    'Auto Tawar dicek lebih dulu daripada Auto Terima; satu job hanya memicu satu aksi otomatis. '
+    'Harga tawar dihitung dari opsi di bawah syarat (persentase, rentang harga, atau tawar default) dan tidak pernah di bawah Harga Client.'
 )
 TIP_TARGET_TAWAR = (
-    "Harga tawar dihitung sebagai persentase dari Harga Estimasi (boleh "
-    "lebih dari 100%), lalu dibulatkan ke bawah ke ribuan. Kalau tidak "
-    "dicentang, bot memakai tawar default: sedikit di bawah Harga Estimasi. "
-    "Apa pun metodenya, harga tawar tidak pernah di bawah Harga Client."
+    'Harga tawar = Harga Estimasi x persentase (boleh lebih dari 100%), dibulatkan ke bawah ke ribuan. '
+    'Contoh persentase 128%: estimasi 80.000 -> 102.400 -> ditawar Rp102.000. '
+    'Kalau tidak dicentang, bot memakai tawar default: Harga Estimasi dikurangi potongan bertingkat (estimasi <100rb -15rb; <150rb -30rb; <200rb -40rb; <270rb -55rb; <350rb -70rb; 350rb ke atas -100rb). Contoh: estimasi 251.583 -> 196.583 -> Rp196.000. '
+    'Apa pun metodenya, tawar tidak pernah di bawah Harga Client.'
 )
 TIP_RANGE = (
-    "Kalau Harga Estimasi job berada di antara Harga Min dan Max, tawar = "
-    "Harga Estimasi x persentase, dengan dasar minimal (kolom paling kanan, "
-    "kosongkan kalau tidak perlu). Contoh: dasar minimal 60.000, persentase "
-    "128%: estimasi 59.455 -> 60.000 x 128% = 76.000; estimasi 80.000 -> "
-    "80.000 x 128% = 102.000. Estimasi di luar rentang Min-Max tidak "
-    "memakai ini (lihat opsi \"Di luar rentang\")."
+    'Membatasi job mana yang memakai rumus persentase. Harga Estimasi job harus ada di antara Harga Min dan Harga Max; kalau ya, tawar = max(Harga Estimasi, Dasar Minimal) x persentase. '
+    'Contoh (Min 5.000, Max 90.500, Dasar Minimal 60.000, 128%): estimasi 50.000 -> 60.000 x 128% = Rp76.000. Estimasi 80.000 -> 80.000 x 128% = Rp102.000. Estimasi 251.583 -> di luar rentang, lihat opsi "Di luar rentang".'
 )
 TIP_RANGE_MIN = (
-    "Batas BAWAH rentang. Job hanya memakai rumus Tawar Rentang Harga kalau "
-    "Harga Estimasi-nya >= angka ini. Di bawahnya dianggap di luar rentang."
+    'Batas BAWAH rentang (Rp). Job memakai rumus Tawar Rentang Harga hanya kalau Harga Estimasi-nya sama atau di atas angka ini. '
+    'Contoh: 5000 -> estimasi 3.000 dianggap di luar rentang; estimasi 7.679 masuk rentang.'
 )
 TIP_RANGE_MAX = (
-    "Batas ATAS rentang. Job hanya memakai rumus Tawar Rentang Harga kalau "
-    "Harga Estimasi-nya <= angka ini. Di atasnya dianggap di luar rentang "
-    "(lihat opsi \"Di luar rentang: tawar default\")."
+    'Batas ATAS rentang (Rp). Job memakai rumus Tawar Rentang Harga hanya kalau Harga Estimasi-nya sama atau di bawah angka ini. '
+    'Contoh: 90500 -> estimasi 80.000 masuk rentang; estimasi 251.583 di luar rentang (ikut opsi "Di luar rentang").'
 )
 TIP_RANGE_BASE = (
-    "Dasar perhitungan persentase = Harga Estimasi, tapi tidak boleh kurang "
-    "dari angka ini. Contoh: dasar minimal 60.000, persentase 128%: estimasi "
-    "50.000 -> 60.000 x 128% = 76.000; estimasi 80.000 -> 80.000 x 128% = "
-    "102.000. Kosongkan kalau tidak mau ada minimal."
+    'Dasar perhitungan persentase = Harga Estimasi, tapi tidak boleh kurang dari angka ini (Rp). Kosongkan kalau tidak perlu minimal. '
+    'Contoh (dasar minimal 60.000, persentase 128%): estimasi 50.000 -> dasar 60.000 -> 76.800 -> Rp76.000. Estimasi 80.000 -> dasar 80.000 -> 102.400 -> Rp102.000.'
 )
 TIP_DEFAULT_FLOOR = (
-    "Pengaturan tawar default: kalau Harga Estimasi DAN Harga Client sama-sama "
-    "di bawah angka ini, tawar default menjadi angka ini. Contoh: 100000 "
-    "berarti job dengan estimasi dan client di bawah Rp100.000 ditawar "
-    "Rp100.000. Hanya berlaku saat memakai tawar default (Target Tawar % "
-    "tidak dicentang, atau Harga Estimasi di luar rentang harga)."
+    'Tawar default minimal (Rp): kalau Harga Estimasi DAN Harga Client sama-sama di bawah angka ini, tawar default menjadi angka ini. '
+    'Contoh 100000: estimasi 80.000 dan client 60.000 -> ditawar Rp100.000. Estimasi 120.000 -> tidak berlaku, pakai potongan bertingkat biasa (120.000 -30rb = Rp90.000, lalu dinaikkan ke Harga Client kalau client lebih tinggi). '
+    'Hanya berlaku saat memakai tawar default (Target Tawar % tidak dicentang, atau estimasi di luar rentang harga).'
 )
 TIP_OUTSIDE = (
-    "Kalau Harga Estimasi job di luar rentang, bot memakai tawar default "
-    "(sedikit di bawah Harga Estimasi), bukan persentase. Jadi persentase "
-    "di atas 100% hanya berlaku untuk job di dalam rentang. Kalau tidak "
-    "dicentang, di luar rentang tetap memakai persentase biasa."
+    'Kalau Harga Estimasi job di luar rentang Min-Max, bot memakai tawar default (di bawah Harga Estimasi, potongan bertingkat) dan BUKAN persentase. Jadi persentase di atas 100% hanya berlaku untuk job di dalam rentang. '
+    'Contoh (rentang 5.000-90.500, 128%): estimasi 251.583 -> tawar default Rp196.000, bukan 128% x 251.583 = Rp322.000. '
+    'Kalau tidak dicentang, di luar rentang tetap memakai persentase biasa.'
 )
 
 
@@ -353,35 +342,40 @@ def tip_jenis(aksi, jenis):
 
 
 _TIP_DEADLINE_MIN = (
-    "Sisa waktu sampai deadline job minimal sekian jam. Syarat deadline "
-    "hanya berlaku kalau Deadline min DAN max sama-sama diisi."
+    "Sisa waktu sampai deadline job minimal sekian jam. Contoh: 2 -> job "
+    "dengan sisa 18 jam lolos, sisa 1 jam ditolak. Syarat deadline hanya "
+    "berlaku kalau Deadline min DAN max sama-sama diisi."
 )
 _TIP_DEADLINE_MAX = (
-    "Sisa waktu sampai deadline job maksimal sekian jam. Syarat deadline "
-    "hanya berlaku kalau Deadline min DAN max sama-sama diisi."
+    "Sisa waktu sampai deadline job maksimal sekian jam. Contoh: 72 -> job "
+    "dengan sisa 18 jam lolos, sisa 100 jam ditolak. Syarat deadline hanya "
+    "berlaku kalau Deadline min DAN max sama-sama diisi."
 )
 _TIP_WORD_MIN = (
-    "Jumlah kata minimal (sama atau lebih). Khusus Humanizer; kosongkan "
-    "kalau tidak dibatasi."
+    "Jumlah kata minimal (sama atau lebih). Contoh: 800 -> 1.200 kata "
+    "lolos, 500 kata ditolak. Khusus Humanizer; kosongkan kalau tidak dibatasi."
 )
 _TIP_WORD_MAX = (
-    "Jumlah kata harus KURANG dari angka ini. Khusus Humanizer; kosongkan "
-    "kalau tidak dibatasi."
+    "Jumlah kata harus KURANG dari angka ini. Contoh: 4000 -> 3.500 kata "
+    "lolos, 4.000 kata ke atas ditolak. Khusus Humanizer; kosongkan kalau "
+    "tidak dibatasi."
 )
 
 # Penjelasan judul field syarat Auto Terima (kunci = key di field_defs).
 TIPS_TERIMA = {
     "min_target": "Target Persentase job minimal sama dengan angka ini. "
-                  "Di bawahnya ditolak.",
+                  "Di bawahnya ditolak. Contoh: 17 -> target 20 lolos, "
+                  "target 15 ditolak.",
     "min_client_pct": "Perbandingan Harga Client dengan Harga Estimasi "
                       "(Client / Estimasi x 100). Job di bawah persentase ini "
                       "ditolak. Contoh: 80 berarti harga client minimal 80% "
-                      "dari estimasi.",
+                      "dari estimasi: client 80.000 dan estimasi 100.000 (80%) "
+                      "lolos; client 70.000 (70%) ditolak.",
     "min_client_price": "Batas minimal HARGA CLIENT dalam rupiah (harga "
                         "yang diajukan client, bukan Harga Estimasi). Job "
                         "dengan Harga Client di bawah angka ini ditolak. "
-                        "Contoh: 75000 berarti Harga Client minimal Rp75.000, "
-                        "berapa pun persentasenya terhadap estimasi.",
+                        "Contoh: 75000 -> client 80.000 lolos, client 60.000 "
+                        "ditolak, berapa pun persentasenya terhadap estimasi.",
     "deadline_min_h": _TIP_DEADLINE_MIN,
     "deadline_max_h": _TIP_DEADLINE_MAX,
     "min_word_count": _TIP_WORD_MIN,
@@ -390,15 +384,18 @@ TIPS_TERIMA = {
 
 # Penjelasan judul field syarat Auto Tawar.
 TIPS_TAWAR = {
-    "target_min": "Target Persentase job minimal sama dengan angka ini.",
+    "target_min": "Target Persentase job minimal sama dengan angka ini. "
+                  "Contoh: 14 -> target 20 lolos, target 10 ditolak.",
     "target_max": "Target Persentase job maksimal sama dengan angka ini. "
-                  "Di atasnya ditolak.",
+                  "Di atasnya ditolak. Contoh: 25 -> target 20 lolos, "
+                  "target 30 ditolak.",
     "max_client_pct": "Perbandingan Harga Client dengan Harga Estimasi "
                       "(Client / Estimasi x 100). Job hanya ditawar kalau "
                       "persentasenya DI BAWAH angka ini. Contoh: 79 berarti "
-                      "harga client harus kurang dari 79% estimasi. Kalau Harga Client "
-                      "sama atau lebih tinggi dari Harga Estimasi, syarat ini "
-                      "langsung lolos.",
+                      "harga client harus kurang dari 79% estimasi: client 60.000 "
+                      "dan estimasi 100.000 (60%) lolos; client 85.000 (85%) "
+                      "ditolak. Kalau Harga Client sama atau lebih tinggi dari "
+                      "Harga Estimasi, syarat ini langsung lolos.",
     "deadline_min_h": _TIP_DEADLINE_MIN,
     "deadline_max_h": _TIP_DEADLINE_MAX,
     "min_word_count": _TIP_WORD_MIN,
