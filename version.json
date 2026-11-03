@@ -1,6 +1,6 @@
 {
-  "version": "1.17.16",
+  "version": "1.17.17",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Penjelasan (hover) semua field & opsi Auto Terima/Auto Tawar diperjelas dan disertai contoh perhitungan: syarat target, client %, harga client, deadline, kata, persentase tawar, rentang harga (min/max/dasar minimal), di luar rentang, dan tawar default minimal."
+  "notes": "Tawar: kalau Harga Client sama/lebih tinggi dari Harga Estimasi, tawar sekarang ke ATAS (persentase tawar bila >100%, selain itu 110% dari estimasi; selalu di atas Harga Client). Terima otomatis setelah tawaran ditolak dipercepat: cek status tiap 0,3 detik (sebelumnya 1,2 detik) dan tanpa delay acak; syarat Auto Terima tetap dicek."
 }

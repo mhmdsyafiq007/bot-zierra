@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.16"
+APP_VERSION = "1.17.17"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -3955,6 +3955,29 @@ class App(tk.Tk):
             client_price = float(job.get("harga_client_raw"))
         except (TypeError, ValueError):
             client_price = None
+        # Harga Client SAMA/LEBIH TINGGI dari Harga Estimasi: tawar harus
+        # ke ATAS (lebih tinggi dari Harga Client), bukan dipotong ke bawah.
+        # Pakai persentase tawar kalau > 100%, kalau tidak 110% dari estimasi.
+        try:
+            _est = float(job.get("harga_estimasi_raw"))
+        except (TypeError, ValueError):
+            _est = None
+        if client_price is not None and _est and client_price >= _est:
+            try:
+                _pct = float(jenis_settings.get("target_tawar_pct"))
+            except (TypeError, ValueError):
+                _pct = 0.0
+            if not (jenis_settings.get("use_target_tawar") and _pct > 100):
+                _pct = 110.0
+            dasar = max(_est, client_price)
+            naik = compute_tawar_price_from_client(dasar, _pct)
+            if naik <= client_price:
+                naik = int(client_price // 1000) * 1000 + 1000
+            harga_tawar = naik
+            self._safe_log(
+                f"[TAWAR] Client Rp{int(client_price)} >= estimasi "
+                f"Rp{int(_est)} - tawar ke atas: Rp{int(dasar)} x {_pct:g}% "
+                f"= Rp{harga_tawar}", "sys")
         if harga_tawar is None and job.get("harga_estimasi_raw") not in (None, ""):
             try:
                 estimasi_val = float(job.get("harga_estimasi_raw"))
@@ -4443,7 +4466,7 @@ class App(tk.Tk):
                 if status == "waiting-confirmation" and complete:
                     info = cur
                     break
-                time.sleep(1.2)
+                time.sleep(0.3)
             if info is None:
                 self.ui(self.log, f"[REJECT] {ref}: status tidak kembali "
                                   "waiting-confirmation dalam 60 detik — "
@@ -4454,11 +4477,8 @@ class App(tk.Tk):
                                   "Auto Terima — dilewati.", "skip")
                 return
 
-            lo, hi = self.auto_delay_min_ms / 1000, self.auto_delay_max_ms / 1000
-            if hi > lo:
-                time.sleep(random.uniform(lo, hi))
-            elif hi > 0:
-                time.sleep(hi)
+            # Sengaja TANPA delay acak: job yang tawarannya ditolak langsung
+            # diperebutkan semua worker, tiap ratusan ms berarti.
             if self.is_paused:
                 return
 
