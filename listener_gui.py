@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.19"
+APP_VERSION = "1.17.20"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -2839,10 +2839,37 @@ class App(tk.Tk):
         self._process_monitor_started = True
         threading.Thread(target=self._process_monitor_loop, daemon=True).start()
 
+    def _backfill_note(self, ref, info):
+        """Lengkapi data entry catatan yang kosong (deadline "-", tanpa
+        waktu masuk) dari detail terbaru di server."""
+        changed = False
+        dl = info.get("deadline_dt")
+        for e in self.job_notes_list:
+            if e.get("ref") != ref:
+                continue
+            if dl is not None and not e.get("deadline_ts"):
+                e["deadline_ts"] = dl.timestamp()
+                e["deadline"] = info.get("deadline") or e.get("deadline")
+                changed = True
+            if info.get("updated_ts") and e.get("updated_ts") != info["updated_ts"]:
+                e["updated_ts"] = info["updated_ts"]
+                changed = True
+            if e.get("harga_client") in (None, "", "-") and info.get("harga_client") not in (None, "", "-"):
+                e["harga_client"] = info["harga_client"]
+                changed = True
+        if changed:
+            self.save_job_notes()
+            self._refresh_notes_popup_if_open()
+            self._refresh_process_popup_if_open()
+
     def _process_monitor_loop(self):
         fails = {}
+        first = True
         while True:
-            time.sleep(60)
+            # Putaran pertama cepat (10 dtk) supaya data yang kurang
+            # (deadline/waktu masuk) langsung dilengkapi setelah dibuka.
+            time.sleep(10 if first else 60)
+            first = False
             try:
                 for note in list(self._active_process_jobs()):
                     jid, coll = note.get("id"), note.get("collection")
@@ -2862,6 +2889,7 @@ class App(tk.Tk):
                                 "dibuka ulang.", "err")
                         continue
                     fails[ref] = 0
+                    self.ui(self._backfill_note, ref, info)
                     st = (info.get("status") or "").strip().lower()
                     if any(w in st for w in ("done", "complete", "selesai")):
                         self.ui(self._mark_job_note_done, note.get("ref"))
@@ -2910,6 +2938,9 @@ class App(tk.Tk):
                     if not hard:
                         other = self._owned_by_other(info)
                         job["updated_ts"] = info.get("updated_ts")
+                        if info.get("deadline_dt") is not None and not job.get("deadline_ts"):
+                            job["deadline_ts"] = info["deadline_dt"].timestamp()
+                            job["deadline"] = info.get("deadline")
                 if other:
                     self._safe_log(
                         f"[CATATAN] {ref}: notif PAID tapi worker-nya {other}, "
@@ -3024,6 +3055,9 @@ class App(tk.Tk):
                 # Berubah jadi status lain (bukan waiting-payment/expired) —
                 # ini yang dianggap "masuk proses".
                 job["updated_ts"] = info.get("updated_ts")
+                if info.get("deadline_dt") is not None and not job.get("deadline_ts"):
+                    job["deadline_ts"] = info["deadline_dt"].timestamp()
+                    job["deadline"] = info.get("deadline")
                 self.ui(self._add_job_note, job, status_baru)
                 return
         # Batas waktu pantau habis tanpa pernah masuk proses.

@@ -1,6 +1,6 @@
 {
-  "version": "1.17.19",
+  "version": "1.17.20",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Popup Job Proses: pilihan urutan \"Deadline terdekat\" atau \"Terbaru masuk proses\" (waktu dari Tanggal Diubah di server). Tiap job menampilkan \"Masuk proses: tanggal, jam\". Pilihan urutan diingat."
+  "notes": "Job Proses: deadline kosong (\"-\") dan waktu masuk proses yang belum tercatat kini dilengkapi otomatis dari data server (10 detik setelah aplikasi dibuka, lalu tiap menit), sehingga urutan \"Terbaru masuk proses\" (terbaru di atas) dan \"Deadline terdekat\" akurat untuk job lama juga. Job baru langsung mengisi deadline dari data terbaru saat dicatat."
 }
