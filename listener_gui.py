@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.18"
+APP_VERSION = "1.17.19"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -608,6 +608,9 @@ class App(tk.Tk):
         self.job_notes_list = self.load_job_notes()
         self.notes_popup = None
         self.process_popup = None
+        self.process_sort = self._read_raw_config().get("process_sort", "deadline")
+        if self.process_sort not in ("deadline", "masuk"):
+            self.process_sort = "deadline"
         self._sync_lock = threading.Lock()
         self.process_popup_position = self.load_process_popup_position()
         self._process_tick = None
@@ -2648,6 +2651,8 @@ class App(tk.Tk):
             "id": job.get("id"),
             "collection": job.get("collection"),
             "deadline_ts": job.get("deadline_ts"),
+            "updated_ts": job.get("updated_ts"),
+            "added_ts": time.time(),
         }
         self.job_notes_list.append(entry)
         self.save_job_notes()
@@ -2671,9 +2676,22 @@ class App(tk.Tk):
     def _active_process_jobs(self):
         jobs = [n for n in self.job_notes_list
                 if not self._is_finished_status(n.get("status"))]
-        jobs.sort(key=lambda n: (n.get("deadline_ts") is None,
-                                 n.get("deadline_ts") or 0))
+        if getattr(self, "process_sort", "deadline") == "masuk":
+            # Terbaru masuk proses di atas (updatedAt server, cadangan:
+            # waktu job dicatat aplikasi).
+            jobs.sort(key=lambda n: -(n.get("updated_ts")
+                                      or n.get("added_ts") or 0))
+        else:
+            jobs.sort(key=lambda n: (n.get("deadline_ts") is None,
+                                     n.get("deadline_ts") or 0))
         return jobs
+
+    def _set_process_sort(self, mode):
+        self.process_sort = mode
+        data = self._read_raw_config()
+        data["process_sort"] = mode
+        self._write_raw_config(data)
+        self.show_process_popup()
 
     def _process_button_text(self):
         mark = "● " if self._popup_open("process_popup") else ""
@@ -2726,10 +2744,22 @@ class App(tk.Tk):
         pad.pack(fill="both", expand=True)
         tk.Label(pad, text="Job Proses", bg=CARD, fg=TEXT,
                  font=(FONT, 12, "bold")).pack(anchor="w", pady=(0, 2))
-        tk.Label(pad, text="Job yang sedang dikerjakan, deadline terdekat di "
-                           "atas. Hilang otomatis kalau sudah done.",
+        tk.Label(pad, text="Job yang sedang dikerjakan. Hilang otomatis "
+                           "kalau sudah done.",
                  bg=CARD, fg=MUTED, font=(FONT, 8), wraplength=320,
-                 justify="left").pack(anchor="w", pady=(0, 10))
+                 justify="left").pack(anchor="w", pady=(0, 6))
+        sort_row = tk.Frame(pad, bg=CARD)
+        sort_row.pack(anchor="w", pady=(0, 8))
+        tk.Label(sort_row, text="Urutkan:", bg=CARD, fg=MUTED,
+                 font=(FONT, 8)).pack(side="left", padx=(0, 6))
+        for mode, label in (("deadline", "Deadline terdekat"),
+                            ("masuk", "Terbaru masuk proses")):
+            on = self.process_sort == mode
+            RoundedButton(
+                sort_row, label, lambda m=mode: self._set_process_sort(m),
+                width=150 if mode == "masuk" else 130, height=26,
+                fill=ACCENT if on else ACCENT_SOFT, bg=CARD, subtle=not on,
+            ).pack(side="left", padx=(0, 6))
 
         jobs = self._active_process_jobs()
         if not jobs:
@@ -2748,6 +2778,13 @@ class App(tk.Tk):
                      ).pack(anchor="w")
             tk.Label(col, text=f"{note.get('status', '-')}  ·  {note.get('ref', '-')}",
                      bg=FIELD, fg=MUTED, font=(FONT, 8), anchor="w").pack(anchor="w")
+            _ts = note.get("updated_ts") or note.get("added_ts")
+            if _ts:
+                from datetime import datetime as _d
+                tk.Label(col, text="Masuk proses: "
+                         + _d.fromtimestamp(_ts).strftime("%d %b %Y, %H.%M"),
+                         bg=FIELD, fg=MUTED, font=(FONT, 8), anchor="w"
+                         ).pack(anchor="w")
             rem_txt, rem_color = self._fmt_remaining(note.get("deadline_ts"))
             line = tk.Frame(col, bg=FIELD)
             line.pack(anchor="w")
@@ -2872,6 +2909,7 @@ class App(tk.Tk):
                         job["id"], job["collection"], None)
                     if not hard:
                         other = self._owned_by_other(info)
+                        job["updated_ts"] = info.get("updated_ts")
                 if other:
                     self._safe_log(
                         f"[CATATAN] {ref}: notif PAID tapi worker-nya {other}, "
@@ -2985,6 +3023,7 @@ class App(tk.Tk):
             if norm_baru != _norm(status_awal):
                 # Berubah jadi status lain (bukan waiting-payment/expired) —
                 # ini yang dianggap "masuk proses".
+                job["updated_ts"] = info.get("updated_ts")
                 self.ui(self._add_job_note, job, status_baru)
                 return
         # Batas waktu pantau habis tanpa pernah masuk proses.
@@ -3093,6 +3132,8 @@ class App(tk.Tk):
                     "id": o["id"],
                     "collection": o["collection"],
                     "deadline_ts": dl.timestamp() if dl is not None else None,
+                    "updated_ts": info.get("updated_ts"),
+                    "added_ts": time.time(),
                 })
             self.ui(self._apply_synced_jobs, new_entries, len(found))
 

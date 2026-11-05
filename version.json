@@ -1,6 +1,6 @@
 {
-  "version": "1.17.18",
+  "version": "1.17.19",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan Tawar Rentang Harga: Auto Tawar kini benar-benar hanya jalan untuk job yang Harga Estimasi-nya di dalam rentang. Di luar rentang dilewati, kecuali \"Di luar rentang: tawar default\" dicentang (maka ditawar dengan tawar default). Penjelasan hover diperbarui."
+  "notes": "Popup Job Proses: pilihan urutan \"Deadline terdekat\" atau \"Terbaru masuk proses\" (waktu dari Tanggal Diubah di server). Tiap job menampilkan \"Masuk proses: tanggal, jam\". Pilihan urutan diingat."
 }

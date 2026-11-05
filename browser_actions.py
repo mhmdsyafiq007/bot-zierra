@@ -871,6 +871,10 @@ class BrowserActions:
         info["deadline"] = _format_deadline(deadline_raw) if deadline_raw else "-"
         info["ref"] = order.get("ref")
         info["status"] = str(pick("status") or "-")
+        # "Tanggal Diubah" di web = updatedAt; saat status berubah jadi
+        # paid/process nilainya = waktu job masuk proses.
+        _upd = _parse_deadline(pick("updatedAt", "updated_at"))
+        info["updated_ts"] = _upd.timestamp() if _upd else None
         w = order.get("worker") if isinstance(order, dict) else None
         if isinstance(w, dict):
             info["worker_id"] = str(w.get("_id") or w.get("id") or "") or None
