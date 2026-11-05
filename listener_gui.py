@@ -129,7 +129,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.17"
+APP_VERSION = "1.17.18"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -309,8 +309,8 @@ TIP_TARGET_TAWAR = (
     'Apa pun metodenya, tawar tidak pernah di bawah Harga Client.'
 )
 TIP_RANGE = (
-    'Membatasi job mana yang memakai rumus persentase. Harga Estimasi job harus ada di antara Harga Min dan Harga Max; kalau ya, tawar = max(Harga Estimasi, Dasar Minimal) x persentase. '
-    'Contoh (Min 5.000, Max 90.500, Dasar Minimal 60.000, 128%): estimasi 50.000 -> 60.000 x 128% = Rp76.000. Estimasi 80.000 -> 80.000 x 128% = Rp102.000. Estimasi 251.583 -> di luar rentang, lihat opsi "Di luar rentang".'
+    'Auto Tawar HANYA jalan untuk job yang Harga Estimasi-nya ada di antara Harga Min dan Harga Max. Di dalam rentang, tawar = max(Harga Estimasi, Dasar Minimal) x persentase. '
+    'Contoh (Min 5.000, Max 90.500, Dasar Minimal 60.000, 128%): estimasi 50.000 -> Rp76.000. Estimasi 80.000 -> Rp102.000. Estimasi 430.022 -> di luar rentang: tidak ditawar otomatis (kecuali opsi "Di luar rentang: tawar default" dicentang).'
 )
 TIP_RANGE_MIN = (
     'Batas BAWAH rentang (Rp). Job memakai rumus Tawar Rentang Harga hanya kalau Harga Estimasi-nya sama atau di atas angka ini. '
@@ -330,9 +330,10 @@ TIP_DEFAULT_FLOOR = (
     'Hanya berlaku saat memakai tawar default (Target Tawar % tidak dicentang, atau estimasi di luar rentang harga).'
 )
 TIP_OUTSIDE = (
-    'Kalau Harga Estimasi job di luar rentang Min-Max, bot memakai tawar default (di bawah Harga Estimasi, potongan bertingkat) dan BUKAN persentase. Jadi persentase di atas 100% hanya berlaku untuk job di dalam rentang. '
-    'Contoh (rentang 5.000-90.500, 128%): estimasi 251.583 -> tawar default Rp196.000, bukan 128% x 251.583 = Rp322.000. '
-    'Kalau tidak dicentang, di luar rentang tetap memakai persentase biasa.'
+    'Menentukan nasib job yang Harga Estimasi-nya DI LUAR rentang Min-Max. '
+    'Tidak dicentang: job di luar rentang TIDAK ditawar otomatis (dilewati). '
+    'Dicentang: job di luar rentang tetap ditawar otomatis, tapi dengan tawar default (di bawah Harga Estimasi, potongan bertingkat), bukan persentase. '
+    'Contoh (rentang 5.000-90.500): estimasi 251.583 -> dicentang: ditawar default Rp196.000; tidak dicentang: dilewati.'
 )
 
 
@@ -4389,6 +4390,20 @@ class App(tk.Tk):
         settings = self.auto_tawar_jenis_settings.get(jenis)
         if not settings or not settings.get("enabled"):
             return False
+        # Tawar Rentang Harga aktif = Harga Estimasi job HARUS di dalam
+        # rentang agar Auto Tawar jalan. Di luar rentang: kalau "Di luar
+        # rentang: tawar default" dicentang tetap ditawar (pakai default),
+        # kalau tidak, job ini dilewati (tidak ditawar otomatis).
+        rmin, rmax = settings.get("price_range_min"), settings.get("price_range_max")
+        if (settings.get("use_price_range") and rmin not in (None, "")
+                and rmax not in (None, "")
+                and not settings.get("outside_range_default")):
+            try:
+                est = float(info.get("harga_estimasi_raw"))
+            except (TypeError, ValueError):
+                return False
+            if not (float(rmin) <= est <= float(rmax)):
+                return False
         return self._evaluate_auto_tawar_conditions(info, settings)
 
     def _maybe_auto_actions(self, info, token):
