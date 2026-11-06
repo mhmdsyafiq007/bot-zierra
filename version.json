@@ -1,6 +1,6 @@
 {
-  "version": "1.17.20",
+  "version": "1.17.21",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Job Proses: deadline kosong (\"-\") dan waktu masuk proses yang belum tercatat kini dilengkapi otomatis dari data server (10 detik setelah aplikasi dibuka, lalu tiap menit), sehingga urutan \"Terbaru masuk proses\" (terbaru di atas) dan \"Deadline terdekat\" akurat untuk job lama juga. Job baru langsung mengisi deadline dari data terbaru saat dicatat."
+  "notes": "Diagnosa popup kosong/tombol tidak bereaksi: error di tombol/popup kini muncul di log aplikasi ([ERROR] ...) dan ditulis ke bot_debug.log di samping exe; jika tampilan macet >5 detik, apa yang memblokir dicatat otomatis ke bot_debug.log. Kirim file bot_debug.log bila masalah muncul lagi."
 }

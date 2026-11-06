@@ -62,6 +62,23 @@ def external_path(name):
 
 
 CONFIG_FILE = external_path("config.json")
+DEBUG_LOG_FILE = external_path("bot_debug.log")
+
+
+def debug_log(text):
+    """Catatan diagnosa ke bot_debug.log (di samping exe). Tidak pernah
+    boleh menyebabkan error baru."""
+    try:
+        from datetime import datetime as _dt
+        with open(DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{_dt.now():%Y-%m-%d %H:%M:%S}] {text}\n")
+        if os.path.getsize(DEBUG_LOG_FILE) > 512 * 1024:   # jaga ukuran
+            with open(DEBUG_LOG_FILE, "r", encoding="utf-8") as f:
+                tail = f.read()[-200 * 1024:]
+            with open(DEBUG_LOG_FILE, "w", encoding="utf-8") as f:
+                f.write(tail)
+    except Exception:                              # noqa: BLE001
+        pass
 SESSION_NAME = external_path("kawalu_shared")
 SOUND_FILE = resource_path("notif.wav")
 
@@ -129,7 +146,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.20"
+APP_VERSION = "1.17.21"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -878,6 +895,51 @@ class App(tk.Tk):
     def ui(self, fn, *args):
         self.after(0, lambda: fn(*args))
 
+    # ------------------------------------------------------ diagnosa
+    def report_callback_exception(self, exc, val, tb):
+        """Error di callback Tk (klik tombol, after, dll) sebelumnya hilang
+        diam-diam di exe — sekarang ditulis ke log aplikasi + bot_debug.log
+        supaya penyebab popup kosong / tombol tidak bereaksi bisa dilihat."""
+        import traceback
+        detail = "".join(traceback.format_exception(exc, val, tb))
+        debug_log("ERROR callback Tk:\n" + detail)
+        try:
+            self.log(f"[ERROR] {exc.__name__}: {val} (detail di bot_debug.log)",
+                     "err")
+        except Exception:                          # noqa: BLE001
+            pass
+
+    def _start_ui_watchdog(self):
+        """Deteksi UI macet (jendela putih / tombol tidak bereaksi): kalau
+        thread UI tidak merespons >5 detik, tumpukan panggilannya dicatat
+        ke bot_debug.log supaya terlihat apa yang memblokir."""
+        if getattr(self, "_watchdog_started", False):
+            return
+        self._watchdog_started = True
+        self._ui_beat = time.time()
+        main_id = threading.get_ident()
+
+        def beat():
+            self._ui_beat = time.time()
+            self.after(500, beat)
+        beat()
+
+        def watch():
+            import traceback
+            logged = False
+            while True:
+                time.sleep(1)
+                stale = time.time() - self._ui_beat
+                if stale > 5 and not logged:
+                    frame = sys._current_frames().get(main_id)
+                    stack = "".join(traceback.format_stack(frame)) if frame else "?"
+                    debug_log(f"UI MACET {stale:.0f} detik. Tumpukan:\n{stack}")
+                    logged = True
+                elif stale <= 5 and logged:
+                    debug_log("UI pulih.")
+                    logged = False
+        threading.Thread(target=watch, daemon=True).start()
+
     def _safe_log(self, text, tag="sys"):
         """Log yang aman dipanggil dari thread mana pun (hotkey, Selenium)."""
         self.ui(self.log, text, tag)
@@ -1236,6 +1298,7 @@ class App(tk.Tk):
         self.log("Login berhasil. Tekan Start untuk mulai memantau.", "sys")
         # Lanjutkan pantauan job yang belum selesai sebelum aplikasi ditutup.
         self.after(3000, self._resume_watched_jobs)
+        self._start_ui_watchdog()
         self.after(4000, self._start_process_monitor)
 
     # ------------------------------------------------ pasang Chrome debug
@@ -2725,6 +2788,20 @@ class App(tk.Tk):
         return f"sisa {txt}", (AMBER if left < 6 * 3600 else GREEN)
 
     def show_process_popup(self):
+        try:
+            self._show_process_popup_impl()
+        except Exception as exc:                   # noqa: BLE001
+            import traceback
+            debug_log("ERROR show_process_popup:\n" + traceback.format_exc())
+            self.log(f"[ERROR] Popup Job Proses gagal dibuka: {exc} "
+                     "(detail di bot_debug.log)", "err")
+            if self._popup_open("process_popup"):
+                try:
+                    self.process_popup.destroy()
+                except Exception:                  # noqa: BLE001
+                    pass
+
+    def _show_process_popup_impl(self):
         if self._popup_open("process_popup"):
             win = self.process_popup
             for child in win.winfo_children():
