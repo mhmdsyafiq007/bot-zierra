@@ -1,6 +1,6 @@
 {
-  "version": "1.17.21",
+  "version": "1.17.22",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Diagnosa popup kosong/tombol tidak bereaksi: error di tombol/popup kini muncul di log aplikasi ([ERROR] ...) dan ditulis ke bot_debug.log di samping exe; jika tampilan macet >5 detik, apa yang memblokir dicatat otomatis ke bot_debug.log. Kirim file bot_debug.log bila masalah muncul lagi."
+  "notes": "Perbaikan popup Job Baru/Catatan/Job Proses yang \"ada di taskbar tapi putih/kosong dan tidak bisa dibuka\": posisi popup yang tersimpan di luar layar (mis. -32000 saat di-minimize, atau layar kedua dicabut) sekarang diabaikan dan tidak lagi disimpan, sehingga popup selalu muncul di layar. Posisi buruk lama otomatis diabaikan tanpa edit config."
 }

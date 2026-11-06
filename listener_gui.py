@@ -146,7 +146,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.21"
+APP_VERSION = "1.17.22"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -894,6 +894,40 @@ class App(tk.Tk):
 
     def ui(self, fn, *args):
         self.after(0, lambda: fn(*args))
+
+    # ------------------------------------------------------ posisi popup
+    def _pos_sane(self, x, y):
+        """Posisi popup yang masuk akal (terlihat di layar). Windows
+        melaporkan (-32000, -32000) untuk jendela yang di-minimize, dan
+        layar kedua yang sudah dicabut juga meninggalkan koordinat di luar
+        layar — kalau posisi seperti itu ikut tersimpan, popup berikutnya
+        terbuka di luar layar: ada di taskbar, tapi putih/kosong dan tidak
+        bisa dibuka."""
+        try:
+            x, y = int(x), int(y)
+        except (TypeError, ValueError):
+            return False
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        return (-sw + 100 <= x <= 2 * sw - 100) and (-20 <= y <= sh - 80)
+
+    def _apply_popup_pos(self, win, pos):
+        if pos and self._pos_sane(*pos):
+            win.geometry(f"+{pos[0]}+{pos[1]}")
+            return pos
+        if pos:
+            debug_log(f"Posisi popup tidak valid {pos} — diabaikan.")
+        return None
+
+    def _record_popup_pos(self, win):
+        """Posisi baru dicatat hanya kalau jendela tidak di-minimize dan
+        posisinya masih terlihat; selain itu posisi lama dipertahankan."""
+        try:
+            if win.state() != "normal":
+                return None
+        except Exception:                          # noqa: BLE001
+            return None
+        pos = (win.winfo_x(), win.winfo_y())
+        return pos if self._pos_sane(*pos) else None
 
     # ------------------------------------------------------ diagnosa
     def report_callback_exception(self, exc, val, tb):
@@ -2554,8 +2588,8 @@ class App(tk.Tk):
             win.title("Catatan Hari Ini")
             win.configure(bg=CARD)
             self.notes_popup = win
-            if self.notes_popup_position:
-                win.geometry(f"+{self.notes_popup_position[0]}+{self.notes_popup_position[1]}")
+            self.notes_popup_position = self._apply_popup_pos(
+                win, self.notes_popup_position)
             win.bind("<Configure>", self._on_notes_popup_move)
             win.bind("<Destroy>", self._on_notes_popup_destroyed)
         self._sync_popup_buttons()
@@ -2617,7 +2651,9 @@ class App(tk.Tk):
     def _on_notes_popup_move(self, event):
         win = getattr(self, "notes_popup", None)
         if win and win.winfo_exists():
-            self.notes_popup_position = (win.winfo_x(), win.winfo_y())
+            pos = self._record_popup_pos(win)
+            if pos:
+                self.notes_popup_position = pos
 
     def _on_notes_popup_destroyed(self, event):
         if self.notes_popup_position:
@@ -2811,8 +2847,8 @@ class App(tk.Tk):
             win.title("Job Proses")
             win.configure(bg=CARD)
             self.process_popup = win
-            if self.process_popup_position:
-                win.geometry(f"+{self.process_popup_position[0]}+{self.process_popup_position[1]}")
+            self.process_popup_position = self._apply_popup_pos(
+                win, self.process_popup_position)
             win.bind("<Configure>", self._on_process_popup_move)
             win.bind("<Destroy>", self._on_process_popup_destroyed)
         self._sync_popup_buttons()
@@ -2887,7 +2923,9 @@ class App(tk.Tk):
     def _on_process_popup_move(self, event):
         win = getattr(self, "process_popup", None)
         if win and win.winfo_exists() and event.widget is win:
-            self.process_popup_position = (win.winfo_x(), win.winfo_y())
+            pos = self._record_popup_pos(win)
+            if pos:
+                self.process_popup_position = pos
 
     def _on_process_popup_destroyed(self, event):
         if event.widget is self.process_popup:
@@ -4748,11 +4786,14 @@ class App(tk.Tk):
         win.resizable(False, False)
         win.configure(bg=CARD)
         self.job_popup = win
+        try:
+            win.deiconify()
+        except tk.TclError:
+            pass
 
         # Popup bisa digeser bebas (title bar bawaan OS) — posisi terakhir
         # dipakai lagi untuk popup berikutnya.
-        if self.popup_position:
-            win.geometry(f"+{self.popup_position[0]}+{self.popup_position[1]}")
+        self.popup_position = self._apply_popup_pos(win, self.popup_position)
         win.bind("<Configure>", self._on_popup_move)
         win.bind("<Destroy>", self._on_popup_destroyed)
 
@@ -4803,7 +4844,9 @@ class App(tk.Tk):
     def _on_popup_move(self, event):
         win = getattr(self, "job_popup", None)
         if win and win.winfo_exists():
-            self.popup_position = (win.winfo_x(), win.winfo_y())
+            pos = self._record_popup_pos(win)
+            if pos:
+                self.popup_position = pos
 
     def _on_popup_destroyed(self, event):
         if self.popup_position:
