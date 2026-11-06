@@ -1,6 +1,6 @@
 {
-  "version": "1.17.22",
+  "version": "1.17.23",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan popup Job Baru/Catatan/Job Proses yang \"ada di taskbar tapi putih/kosong dan tidak bisa dibuka\": posisi popup yang tersimpan di luar layar (mis. -32000 saat di-minimize, atau layar kedua dicabut) sekarang diabaikan dan tidak lagi disimpan, sehingga popup selalu muncul di layar. Posisi buruk lama otomatis diabaikan tanpa edit config."
+  "notes": "Perbaikan auto-update: aplikasi sekarang terbuka ulang otomatis setelah update (sebelumnya di beberapa laptop muncul error \"Failed to load Python DLL\" dan harus dibuka manual). Proses update memakai environment bersih, memverifikasi aplikasi benar-benar hidup, mencoba ulang sampai 3x, dan mencatat langkahnya di _update.log. Cadangan versi lama (.exe.bak) kini dihapus otomatis setelah update terbukti stabil. Catatan: perbaikan ini baru efektif untuk update SETELAH versi ini terpasang; update ke versi ini di laptop yang bermasalah bisa saja perlu dibuka manual sekali."
 }

@@ -146,7 +146,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.22"
+APP_VERSION = "1.17.23"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -3967,24 +3967,7 @@ class App(tk.Tk):
             # "timeout /t 2 /nobreak" pas update). ping tidak butuh itu
             # sama sekali, jadi tetap bener2 tersembunyi. (ping -n 3 ~= 2
             # detik jeda, ping -n 2 ~= 1 detik, karena ping pertama instan.)
-            bat_content = (
-                "@echo off\r\n"
-                "ping -n 3 127.0.0.1 >nul\r\n"
-                f'if exist "{current_exe}.bak" del /f /q "{current_exe}.bak"\r\n'
-                f'if exist "{current_exe}" move /y "{current_exe}" "{current_exe}.bak" >nul 2>nul\r\n'
-                "set tries=0\r\n"
-                ":retry\r\n"
-                f'move /y "{new_exe}" "{current_exe}" >nul 2>nul\r\n'
-                "if exist \"" + new_exe + "\" (\r\n"
-                "  set /a tries+=1\r\n"
-                "  if %tries% lss 10 (\r\n"
-                "    ping -n 2 127.0.0.1 >nul\r\n"
-                "    goto retry\r\n"
-                "  )\r\n"
-                ")\r\n"
-                f'start "" "{current_exe}"\r\n'
-                'del "%~f0"\r\n'
-            )
+            bat_content = self._build_update_bat(current_exe, new_exe, bat_path)
             with open(bat_path, "w", encoding="utf-8") as f:
                 f.write(bat_content)
 
@@ -3995,16 +3978,229 @@ class App(tk.Tk):
             # barunya sendiri yang kelihatan. CREATE_NO_WINDOW saja sudah
             # cukup: cmd.exe tetap dapat console (tersembunyi), jadi apa pun
             # yang dijalankan di dalamnya ikut tersembunyi juga.
+            clean_env = {k: v for k, v in os.environ.items()
+                         if k != "_MEIPASS2" and not k.startswith("_PYI")}
+            clean_env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
             subprocess.Popen(
                 ["cmd", "/c", bat_path],
                 creationflags=subprocess.CREATE_NO_WINDOW,
                 close_fds=True,
+                env=clean_env,
             )
             self.ui(self.log, "[UPDATE] Update diunduh — aplikasi akan "
                               "tertutup & terbuka ulang otomatis...", "sys")
             self.after(500, self._quit_for_update)
         except Exception as exc:              # noqa: BLE001
             self.ui(self.log, f"[UPDATE] Gagal menjadwalkan update: {exc}", "err")
+
+    def _build_update_bat(self, current_exe, new_exe, bat_path):
+        """Isi _update.bat: tunggu proses lama benar-benar keluar, tukar
+        exe (lama disimpan sebagai .bak, dipulihkan kalau penukaran gagal),
+        lalu buka exe baru dengan environment BERSIH dan VERIFIKASI bahwa
+        aplikasi benar-benar hidup (file penanda _launch_ok ditulis aplikasi
+        saat start). Kalau tidak hidup dalam ~45 detik: tutup sisa proses
+        (mis. dialog error "Failed to load Python DLL") lalu coba lagi
+        sampai 3x, percobaan ke-2/3 lewat explorer.exe (environment-nya
+        milik Windows, bukan warisan proses lama). Semua langkah dicatat di
+        _update.log supaya penyebabnya bisa dibaca kalau tetap gagal.
+
+        Penyebab asli error "Failed to load Python DLL ...\\_MEIxxxx\\
+        python311.dll": exe baru diluncurkan dari proses lama dan mewarisi
+        variabel PyInstaller-nya, sehingga mengira dirinya masih bagian dari
+        proses lama & memakai folder _MEIxxxx lama yang sudah/sedang dihapus
+        (error serupa: "name 'base_events' is not defined" + "Failed to
+        remove temporary directory")."""
+        q = lambda path: path.replace("%", "%%")          # noqa: E731
+        cur, new = q(current_exe), q(new_exe)
+        folder = os.path.dirname(current_exe)
+        log_path = q(os.path.join(folder, "_update.log"))
+        marker = q(os.path.join(folder, "_launch_ok"))
+        image = os.path.basename(current_exe)
+        stem = os.path.splitext(image)[0]
+
+        L = [
+            "@echo off",
+            "chcp 65001 >nul",     # jalur dengan nama user non-ASCII tetap terbaca
+            f'set "LOG={log_path}"',
+            'if exist "%LOG%" del /f /q "%LOG%"',
+            'echo [%date% %time%] update dimulai >> "%LOG%"',
+        ]
+        # 1. Tunggu proses lama (bootloader induk + anak Python) keluar —
+        #    induk-lah yang menghapus folder _MEIxxxx sebelum exit.
+        pids = []
+        for pid in (os.getppid(), os.getpid()):
+            if pid and pid not in pids:
+                pids.append(pid)
+        for i, pid in enumerate(pids):
+            L += [
+                f"set w{i}=0",
+                f":waitold{i}",
+                f'tasklist /nh /fi "PID eq {pid}" 2>nul | find /i "{stem}" >nul',
+                f"if errorlevel 1 goto oldgone{i}",
+                f"set /a w{i}+=1",
+                f"if %w{i}% geq 40 goto oldgone{i}",
+                "ping -n 2 127.0.0.1 >nul",
+                f"goto waitold{i}",
+                f":oldgone{i}",
+            ]
+        L += [
+            "ping -n 2 127.0.0.1 >nul",
+            'echo [%time%] proses lama sudah keluar >> "%LOG%"',
+            # 2. Tukar exe (lama -> .bak).
+            f'if exist "{cur}.bak" del /f /q "{cur}.bak"',
+            f'if exist "{cur}" move /y "{cur}" "{cur}.bak" >nul 2>nul',
+            "set tries=0",
+            ":retry",
+            f'move /y "{new}" "{cur}" >nul 2>nul',
+            f'if not exist "{new}" goto moved',
+            "set /a tries+=1",
+            "if %tries% geq 20 goto moved",
+            "ping -n 2 127.0.0.1 >nul",
+            "goto retry",
+            ":moved",
+            # Penukaran gagal & exe lama sudah dipindah -> kembalikan.
+            f'if exist "{new}" if not exist "{cur}" move /y "{cur}.bak" "{cur}" >nul 2>nul',
+            f'if exist "{new}" echo [%time%] GAGAL menukar exe >> "%LOG%"',
+            # 3. Environment bersih untuk exe baru.
+            "set _MEIPASS2=",
+            "set _PYI_APPLICATION_HOME_DIR=",
+            "set _PYI_ARCHIVE_FILE=",
+            "set _PYI_PARENT_PROCESS_LEVEL=",
+            "set _PYI_SPLASH_IPC=",
+            "set PYINSTALLER_RESET_ENVIRONMENT=1",
+            f'del "{marker}" >nul 2>nul',
+            "set launch=0",
+            ":launch",
+            "set /a launch+=1",
+            'echo [%time%] membuka aplikasi, percobaan %launch% >> "%LOG%"',
+            f'if %launch% equ 1 start "" "{cur}"',
+            f'if %launch% gtr 1 explorer.exe "{cur}"',
+            "set chk=0",
+            ":check",
+            "ping -n 2 127.0.0.1 >nul",
+            f'if exist "{marker}" goto ok',
+            "set /a chk+=1",
+            "if %chk% lss 45 goto check",
+            'echo [%time%] aplikasi tidak hidup dalam 45 detik >> "%LOG%"',
+            "if %launch% geq 3 goto fail",
+            f"taskkill /f /im {image} >nul 2>nul",
+            "ping -n 4 127.0.0.1 >nul",
+            "goto launch",
+            ":ok",
+            'echo [%time%] aplikasi berhasil terbuka >> "%LOG%"',
+            f'del "{marker}" >nul 2>nul',
+            "goto cleanup",
+            ":fail",
+            'echo [%time%] menyerah - buka aplikasi manual >> "%LOG%"',
+            ":cleanup",
+            'del "%~f0"',
+        ]
+        return "\r\n".join(L) + "\r\n"
+
+    def _report_last_update_log(self):
+        """Kalau update terakhir sempat bermasalah (percobaan buka ulang
+        lebih dari sekali / gagal tukar exe / menyerah), tampilkan isi
+        _update.log di log aplikasi supaya mudah dilaporkan."""
+        try:
+            path = external_path("_update.log")
+            if not os.path.exists(path):
+                return
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            if any(k in text for k in ("percobaan 2", "GAGAL", "menyerah",
+                                       "tidak hidup")):
+                tail = "\n".join(text.strip().splitlines()[-8:])
+                debug_log("Catatan update terakhir bermasalah:\n" + tail)
+                self.log("[UPDATE] Pembukaan ulang setelah update sempat "
+                         "bermasalah, detail di _update.log:\n" + tail, "err")
+        except Exception:                          # noqa: BLE001
+            pass
+
+    def _write_launch_marker(self):
+        """Penanda 'aplikasi hidup' untuk _update.bat (hanya saat dibuka
+        oleh proses update). Sisa penanda lama dibersihkan."""
+        self._report_last_update_log()
+        try:
+            marker = external_path("_launch_ok")
+            if os.path.exists(external_path("_update.bat")):
+                with open(marker, "w", encoding="utf-8") as f:
+                    f.write(APP_VERSION)
+            elif os.path.exists(marker):
+                os.remove(marker)
+        except Exception:                          # noqa: BLE001
+            pass
+        self._schedule_bak_cleanup()
+
+    # Jeda "bukti stabil" sebelum cadangan versi lama (.bak) dihapus.
+    BAK_STABLE_MS = 10 * 60 * 1000
+    BAK_MAX_TRIES = 6
+
+    def _schedule_bak_cleanup(self, tries=0):
+        """Hapus 'BOT_by_Zierra.exe.bak' (cadangan versi lama dari update)
+        HANYA kalau update terbukti berhasil DAN aplikasi baru sudah
+        berjalan normal cukup lama. Selama syarat belum terpenuhi, .bak
+        dibiarkan (itu jaring pengaman rollback)."""
+        try:
+            if not getattr(sys, "frozen", False):
+                return
+            if not os.path.exists(sys.executable + ".bak"):
+                return
+            if tries >= self.BAK_MAX_TRIES:
+                return
+            self.after(self.BAK_STABLE_MS,
+                       lambda: self._cleanup_bak(tries + 1))
+        except Exception:                          # noqa: BLE001
+            pass
+
+    def _bak_update_succeeded(self):
+        """True bila _update.log menyatakan aplikasi baru berhasil terbuka
+        dan tidak ada tanda gagal/menyerah. Log selalu dibuat ulang tiap
+        update, jadi isinya = update terakhir."""
+        try:
+            path = external_path("_update.log")
+            if not os.path.exists(path):
+                return False
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            return ("berhasil terbuka" in text
+                    and "GAGAL" not in text and "menyerah" not in text)
+        except Exception:                          # noqa: BLE001
+            return False
+
+    def _cleanup_bak(self, tries):
+        """Cek ulang semua syarat tepat sebelum menghapus; kalau ada yang
+        belum terpenuhi, jadwalkan cek lagi (maks BAK_MAX_TRIES kali)."""
+        try:
+            exe = sys.executable
+            bak = exe + ".bak"
+            if not os.path.exists(bak):
+                return
+            # Bukan exe yang sedang berjalan (jaga-jaga, mis. user sudah
+            # rollback manual dengan mengganti nama).
+            if os.path.normcase(os.path.abspath(bak)) == \
+                    os.path.normcase(os.path.abspath(exe)):
+                return
+            ready = (
+                not os.path.exists(external_path("_update.bat"))      # update tuntas
+                and not os.path.exists(external_path("_launch_ok"))   # penanda sudah dibersihkan
+                and self._bak_update_succeeded()                       # log: berhasil
+                and (time.time() - getattr(self, "_ui_beat", time.time())) < 30  # UI responsif
+            )
+            if not ready:
+                self._schedule_bak_cleanup(tries)
+                return
+            try:
+                os.remove(bak)
+            except PermissionError:
+                # Masih dipakai proses lain (mis. antivirus memindai) ->
+                # biarkan, coba lagi nanti.
+                self._schedule_bak_cleanup(tries)
+                return
+            debug_log("Cadangan versi lama (.bak) dihapus: update stabil.")
+            self.log("[UPDATE] Update terbukti stabil — cadangan versi lama "
+                     "(.bak) dibersihkan.", "hit")
+        except Exception:                          # noqa: BLE001
+            pass
 
     def _quit_for_update(self):
         """Keluar sebersih mungkin supaya exe lama tidak terkunci, lalu
@@ -4990,4 +5186,8 @@ class App(tk.Tk):
 
 
 if __name__ == "__main__":
-    App().mainloop()
+    app = App()
+    # Penanda "aplikasi hidup" untuk _update.bat — ditulis begitu jendela
+    # siap, TIDAK menunggu login Telegram (yang bisa butuh input user).
+    app.after(800, app._write_launch_marker)
+    app.mainloop()
