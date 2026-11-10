@@ -1,6 +1,6 @@
 {
-  "version": "1.17.24",
+  "version": "1.17.25",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Hemat beban server: polling job proses lebih jarang (jeda acak 2-3 menit) dan berhenti memantau job yang datanya sudah lengkap; pemantauan status job baru melebar bertahap (45 -> 90 -> 180 dtk); penantian data job dan REJECT NEGO tidak lagi menembak tiap 0,3-0,4 dtk setelah detik-detik awal. Pengaman baru di panel Auto Terima: \"Jeda auto (dtk)\" (bawaan 600 = 10 menit antar aksi otomatis Terima/Tawar) dan \"Maks/jam\" (0 = tanpa batas). Isi 0 pada Jeda auto untuk mematikannya. Termasuk perbaikan auto-update 1.17.23 (buka ulang otomatis, .bak dihapus setelah stabil)."
+  "notes": "Hemat request: sinkron job proses tidak lagi mengambil order lama. Order yang tanggal diubah, dibuat, dan deadline-nya semua sebelum 1 Juli 2026 dilewati, dan paging daftar order berhenti begitu satu halaman penuh berisi order lama. Sebelumnya: pengaman Jeda auto (bawaan 10 menit) & Maks/jam di panel Auto Terima, serta polling job proses yang lebih hemat."
 }

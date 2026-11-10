@@ -37,6 +37,11 @@ from selenium.common.exceptions import (
 
 DEBUG_ADDRESS = "127.0.0.1:9222"
 WAIT_TIMEOUT = 6
+
+# Order yang tanggal diubah, dibuat, DAN deadline-nya semua SEBELUM tanggal
+# ini tidak diambil dari daftar order (hemat request & waktu sinkron). 1 Juli 2026 00:00 WIB.
+ORDER_MIN_TS_MS = 1782838800000   # = 2026-06-30T17:00:00Z
+
 ADMIN_HOME = "https://admin.kawalu.id/admin/dashboard"
 
 # Sesuaikan dua nilai ini kalau lokasi Chrome / folder profil kamu berbeda
@@ -671,10 +676,20 @@ class BrowserActions:
     FETCH_LIST_JS = """
     var cb = arguments[arguments.length - 1];
     var collections = arguments[0];
+    var cutoff = arguments[1] || 0;   // ms epoch; order lebih lama diabaikan
     var token = localStorage.getItem('adminToken');
     if (!token) { cb({error: 'no-token'}); return; }
     var H = { headers: { 'Authorization': 'Bearer ' + token } };
     var origin = 'https://admin.kawalu.id';
+    function ts(o) {   // waktu terbaru yang diketahui: diubah / dibuat / deadline
+        var best = 0;
+        ['updatedAt', 'updated_at', 'createdAt', 'created_at',
+         'deadline', 'deadline_date'].forEach(function(k){
+            var t = o[k] ? new Date(o[k]).getTime() : 0;
+            if (t && t > best) best = t;
+        });
+        return best;   // 0 = tidak ada tanggal -> jangan disaring
+    }
     function getJson(u) {
         return fetch(u, H).then(function(r){
             return r.json().then(function(d){ return {status: r.status, data: d, url: u}; },
@@ -712,10 +727,18 @@ class BrowserActions:
                         diag.push(c + ': HTTP ' + r.status + ' ' + u);
                         return false;
                     }
+                    var allOld = r.data.data.length > 0;
                     r.data.data.forEach(function(o){
-                        out.push({collection: c, id: o._id, ref: o.ref, status: o.status});
+                        var t = ts(o);
+                        if (!cutoff || !t || t >= cutoff) {
+                            allOld = false;
+                            out.push({collection: c, id: o._id, ref: o.ref, status: o.status});
+                        }
                     });
                     var tp = r.data.totalPages || 1;
+                    // Urut terbaru -> begitu satu halaman penuh lebih lama
+                    // dari batas, halaman berikutnya pasti lebih lama lagi.
+                    if (cutoff && allOld) return true;
                     if (n < tp && n < 20) return page(base, n + 1);
                     return true;
                 });
@@ -932,7 +955,7 @@ class BrowserActions:
         try:
             result = self._run_authed_fetch(
                 self.FETCH_LIST_JS, None, list(COLLECTION_FIELDS.keys()),
-                timeout=40)
+                ORDER_MIN_TS_MS, timeout=40)
         except Exception as exc:                  # noqa: BLE001
             return [], f"Gagal ambil daftar order: {exc}"
         err = self._check_common_errors(result, "ambil daftar order")
