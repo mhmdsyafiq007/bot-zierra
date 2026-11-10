@@ -1,6 +1,6 @@
 {
-  "version": "1.17.23",
+  "version": "1.17.24",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Perbaikan auto-update: aplikasi sekarang terbuka ulang otomatis setelah update (sebelumnya di beberapa laptop muncul error \"Failed to load Python DLL\" dan harus dibuka manual). Proses update memakai environment bersih, memverifikasi aplikasi benar-benar hidup, mencoba ulang sampai 3x, dan mencatat langkahnya di _update.log. Cadangan versi lama (.exe.bak) kini dihapus otomatis setelah update terbukti stabil. Catatan: perbaikan ini baru efektif untuk update SETELAH versi ini terpasang; update ke versi ini di laptop yang bermasalah bisa saja perlu dibuka manual sekali."
+  "notes": "Hemat beban server: polling job proses lebih jarang (jeda acak 2-3 menit) dan berhenti memantau job yang datanya sudah lengkap; pemantauan status job baru melebar bertahap (45 -> 90 -> 180 dtk); penantian data job dan REJECT NEGO tidak lagi menembak tiap 0,3-0,4 dtk setelah detik-detik awal. Pengaman baru di panel Auto Terima: \"Jeda auto (dtk)\" (bawaan 600 = 10 menit antar aksi otomatis Terima/Tawar) dan \"Maks/jam\" (0 = tanpa batas). Isi 0 pada Jeda auto untuk mematikannya. Termasuk perbaikan auto-update 1.17.23 (buka ulang otomatis, .bak dihapus setelah stabil)."
 }

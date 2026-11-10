@@ -139,6 +139,12 @@ WATCH_PERSIST_KEYS = ("ref", "id", "collection", "url", "jenis", "status",
 
 # Jeda antar pengecekan status koneksi (detik)
 WATCHDOG_INTERVAL = 5
+# Jeda antar pengecekan job proses ke server (detik): acak antara batas
+# bawah dan atas (jitter biasa untuk polling latar belakang). Dulu tetap 60;
+# dilebarkan karena data yang dilengkapi (deadline/status done) jarang
+# berubah, dan notif *DONE* grup juga menandai selesai.
+PROCESS_MONITOR_RANGE = (120, 180)
+MAX_BACKFILL_TRIES = 5    # batas cek ulang data kurang per job proses
 
 # ---------------------------------------------------------------- updater
 # Versi aplikasi ini. UPDATE_CHECK_URL kosong = fitur cek update nonaktif
@@ -146,7 +152,7 @@ WATCHDOG_INTERVAL = 5
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.23"
+APP_VERSION = "1.17.24"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -600,6 +606,13 @@ class App(tk.Tk):
         self.auto_enabled = auto["enabled"]
         self.auto_delay_min_ms = auto["delay_min_ms"]
         self.auto_delay_max_ms = auto["delay_max_ms"]
+        # Pengaman pemakaian wajar (berlaku untuk Auto Terima DAN Auto
+        # Tawar): jeda minimum antar aksi otomatis (bawaan 10 menit) & batas
+        # aksi per jam. 0 = nonaktif.
+        self.auto_cooldown_s = auto["cooldown_s"]
+        self.auto_max_per_hour = auto["max_per_hour"]
+        self._auto_times = []
+        self._auto_gate_lock = threading.Lock()
         # Syarat sekarang per-jenis (bisa lebih dari satu jenis aktif
         # bersamaan) -> {"Parafrase": {...}, "Humanizer": {...}, "Fix File": {...}}
         self.auto_jenis_settings = auto["jenis_settings"]
@@ -1733,6 +1746,34 @@ class App(tk.Tk):
         self.e_auto_delay_max.insert(0, str(int(self.auto_delay_max_ms)))
         self.e_auto_delay_max.pack(side="left", ipady=3)
 
+        lbl_cd = tk.Label(self.auto_delay_box, text="Jeda auto (dtk)",
+                          bg=CARD, fg=MUTED, font=(FONT, 8))
+        lbl_cd.pack(side="left", padx=(14, 4))
+        HoverTip(lbl_cd, "Pengaman: jeda minimum (detik) antar aksi "
+                         "otomatis, berlaku untuk Auto Terima dan Auto "
+                         "Tawar. Job yang masuk selama jeda dilewati "
+                         "(tetap bisa diproses manual). Bawaan 600 (10 "
+                         "menit). 0 = tanpa jeda.")
+        self.e_auto_cooldown = tk.Entry(
+            self.auto_delay_box, bg=FIELD, fg=TEXT, relief="flat", width=4,
+            font=(FONT, 10), insertbackground=ACCENT,
+        )
+        self.e_auto_cooldown.insert(0, str(int(self.auto_cooldown_s)))
+        self.e_auto_cooldown.pack(side="left", ipady=3)
+
+        lbl_mx = tk.Label(self.auto_delay_box, text="Maks/jam", bg=CARD,
+                          fg=MUTED, font=(FONT, 8))
+        lbl_mx.pack(side="left", padx=(10, 4))
+        HoverTip(lbl_mx, "Pengaman: maksimal aksi otomatis (Terima + "
+                         "Tawar) per 60 menit. Lewat batas -> dilewati "
+                         "sampai ada slot kosong. 0 = tanpa batas.")
+        self.e_auto_max_hour = tk.Entry(
+            self.auto_delay_box, bg=FIELD, fg=TEXT, relief="flat", width=3,
+            font=(FONT, 10), insertbackground=ACCENT,
+        )
+        self.e_auto_max_hour.insert(0, str(int(self.auto_max_per_hour)))
+        self.e_auto_max_hour.pack(side="left", ipady=3)
+
         self.auto_delay_box.pack(side="left")
 
         self.auto_simpan_btn = RoundedButton(
@@ -1909,6 +1950,10 @@ class App(tk.Tk):
             self.auto_enabled = bool(self.auto_enabled_var.get())
             self.auto_delay_min_ms = float(self.e_auto_delay_min.get().strip() or 0)
             self.auto_delay_max_ms = float(self.e_auto_delay_max.get().strip() or 0)
+            self.auto_cooldown_s = max(0.0, float(
+                self.e_auto_cooldown.get().strip() or 0))
+            self.auto_max_per_hour = max(0, int(float(
+                self.e_auto_max_hour.get().strip() or 0)))
 
             new_settings = {}
             for jenis in self.JENIS_LIST:
@@ -2946,9 +2991,10 @@ class App(tk.Tk):
         self._write_raw_config(data)
 
     def _start_process_monitor(self):
-        """Thread pemantau (jalan juga saat Pause): cek status job yang
-        belum done lewat API tiap ~60 detik; kalau sudah done -> otomatis
-        hilang dari popup Job Proses. Pelengkap notif *DONE* grup."""
+        """Thread pemantau (jalan juga saat Pause): melengkapi data job
+        proses yang kurang & menangkap job yang sudah done (lihat
+        _process_monitor_loop; hemat beban, berhenti memolling job yang
+        datanya sudah lengkap). Pelengkap notif *DONE* grup."""
         if self._process_monitor_started:
             return
         self._process_monitor_started = True
@@ -2978,19 +3024,33 @@ class App(tk.Tk):
             self._refresh_process_popup_if_open()
 
     def _process_monitor_loop(self):
+        """Pemantau job proses yang HEMAT beban server.
+        - Putaran pertama (10 dtk setelah dibuka): cek SEMUA job aktif satu
+          kali — melengkapi data kurang & menangkap job yang selesai saat
+          aplikasi mati.
+        - Putaran berikutnya: hanya job yang datanya MASIH kurang
+          (deadline/waktu masuk), maksimal MAX_BACKFILL_TRIES kali per job.
+          Job yang datanya sudah lengkap TIDAK dipolling lagi — status
+          selesai diurus notif *DONE* grup. Kalau tidak ada yang perlu
+          dicek, tidak ada panggilan ke server sama sekali."""
         fails = {}
-        first = True
+        tries = {}
+        startup = True
         while True:
-            # Putaran pertama cepat (10 dtk) supaya data yang kurang
-            # (deadline/waktu masuk) langsung dilengkapi setelah dibuka.
-            time.sleep(10 if first else 60)
-            first = False
+            time.sleep(10 if startup else random.uniform(*PROCESS_MONITOR_RANGE))
+            first_round, startup = startup, False
             try:
                 for note in list(self._active_process_jobs()):
                     jid, coll = note.get("id"), note.get("collection")
                     ref = note.get("ref")
                     if not (jid and coll) or fails.get(ref, 0) >= 3:
                         continue
+                    needs = (not note.get("deadline_ts")
+                             or not note.get("updated_ts"))
+                    if not first_round:
+                        if not needs or tries.get(ref, 0) >= MAX_BACKFILL_TRIES:
+                            continue    # sudah dapat yang dicari -> berhenti
+                    tries[ref] = tries.get(ref, 0) + 1
                     # url=None: jalur API memakai halaman dashboard, bukan
                     # membuka halaman detail job (yang bisa "tidak ditemukan").
                     info, _, hard_error = self.browser.fetch_order_detail(
@@ -3127,7 +3187,11 @@ class App(tk.Tk):
         delay = first_delay
         while time.time() < deadline:
             time.sleep(delay)
-            delay = 45
+            # Interval melebar seiring waktu (hemat beban server): 45 dtk
+            # untuk 10 menit pertama, 90 dtk sampai 1 jam, lalu 180 dtk.
+            # Notif *PAID*/*DONE* grup tetap memberi tahu lebih cepat.
+            age = time.time() - float(job["watch_started"])
+            delay = 45 if age < 600 else (90 if age < 3600 else 180)
             # Sudah ditangani lewat notif *PAID*/*DONE* grup selagi tidur —
             # tidak perlu polling lagi untuk job ini.
             if ref and ref not in self.watched_jobs:
@@ -3403,6 +3467,8 @@ class App(tk.Tk):
             # keburu berubah sebelum sempat konfirmasi.
             "delay_min_ms": data.get("auto_delay_min_ms", 300),
             "delay_max_ms": data.get("auto_delay_max_ms", 800),
+            "cooldown_s": data.get("auto_cooldown_s", 600),   # bawaan 10 menit
+            "max_per_hour": data.get("auto_max_per_hour", 0),
             "jenis_settings": {
                 "Parafrase": jset("Parafrase", parafrase_defaults),
                 "Humanizer": jset("Humanizer", humanizer_defaults),
@@ -3415,6 +3481,8 @@ class App(tk.Tk):
         data["auto_enabled"] = self.auto_enabled
         data["auto_delay_min_ms"] = self.auto_delay_min_ms
         data["auto_delay_max_ms"] = self.auto_delay_max_ms
+        data["auto_cooldown_s"] = self.auto_cooldown_s
+        data["auto_max_per_hour"] = self.auto_max_per_hour
         data["auto_jenis_settings"] = self.auto_jenis_settings
         # Kunci format lama (single-jenis) dibuang supaya tidak membingungkan
         # kalau config.json dibuka manual — semua sudah pindah ke
@@ -4548,7 +4616,8 @@ class App(tk.Tk):
                               "ringkasan otomatis dilewati.", "err")
             return
 
-        deadline = time.time() + 25  # batas aman, bukan target normal
+        t_start = time.time()
+        deadline = t_start + 25  # batas aman, bukan target normal
         while True:
             info, complete, hard_error = self.browser.fetch_order_detail(
                 job_id, collection, url
@@ -4562,7 +4631,11 @@ class App(tk.Tk):
 
             if complete or hard_error or time.time() > deadline:
                 break
-            time.sleep(0.4)  # dulu 1 detik — dipercepat biar deteksi lebih cepat
+            # Cepat (0.4 dtk) hanya di 2 detik pertama — saat itu data
+            # paling mungkin baru siap & kecepatan penting. Setelahnya
+            # melambat (1.5 dtk) supaya tidak membanjiri server kalau data
+            # ternyata lama lengkap (maks ~20 req, dulu bisa ~60).
+            time.sleep(0.4 if time.time() - t_start < 2 else 1.5)
 
     def _update_current_job(self, info):
         """Simpan nilai mentah terbaru ke current_job, dipakai _trigger_tawar
@@ -4792,6 +4865,27 @@ class App(tk.Tk):
                 return False
         return self._evaluate_auto_tawar_conditions(info, settings)
 
+    def _auto_gate(self, ref=None):
+        """Pengaman pemakaian wajar: True kalau aksi otomatis boleh jalan
+        sekarang (dan slot-nya langsung dicatat). False kalau masih dalam
+        jeda minimum atau batas per jam tercapai — job dilewati, tetap bisa
+        diproses manual lewat popup."""
+        now = time.time()
+        with self._auto_gate_lock:
+            self._auto_times = [t for t in self._auto_times if now - t < 3600]
+            cd, mx = self.auto_cooldown_s, self.auto_max_per_hour
+            if cd > 0 and self._auto_times and now - self._auto_times[-1] < cd:
+                sisa = int(cd - (now - self._auto_times[-1])) + 1
+                self._safe_log(f"[AUTO] {ref or 'job'} dilewati: masih dalam "
+                               f"jeda pengaman ({sisa} dtk lagi).", "skip")
+                return False
+            if mx > 0 and len(self._auto_times) >= mx:
+                self._safe_log(f"[AUTO] {ref or 'job'} dilewati: batas "
+                               f"{mx} aksi otomatis per jam tercapai.", "skip")
+                return False
+            self._auto_times.append(now)
+            return True
+
     def _maybe_auto_actions(self, info, token):
         """Auto Tawar dicek DULUAN; Auto Terima jadi fallback — hanya
         dicek kalau job ini tidak lolos syarat Auto Tawar. Satu token
@@ -4802,12 +4896,16 @@ class App(tk.Tk):
             return
         if self._check_auto_tawar(info):
             self.auto_action_fired_token = token
+            if not self._auto_gate(info.get("ref")):
+                return
             threading.Thread(
                 target=self._auto_tawar_delayed, args=(token,), daemon=True
             ).start()
             return
         if self._check_auto_terima(info):
             self.auto_action_fired_token = token
+            if not self._auto_gate(info.get("ref")):
+                return
             threading.Thread(
                 target=self._auto_terima_delayed, args=(token,), daemon=True
             ).start()
@@ -4852,7 +4950,8 @@ class App(tk.Tk):
 
     def _reject_nego_worker(self, ref, job_id, collection, url):
         try:
-            deadline = time.time() + 60
+            t_start = time.time()
+            deadline = t_start + 60
             info = None
             while time.time() < deadline:
                 if self.is_paused:
@@ -4867,7 +4966,8 @@ class App(tk.Tk):
                 if status == "waiting-confirmation" and complete:
                     info = cur
                     break
-                time.sleep(0.3)
+                # Rapat (0.3 dtk) hanya 5 detik pertama, lalu 1 dtk.
+                time.sleep(0.3 if time.time() - t_start < 5 else 1.0)
             if info is None:
                 self.ui(self.log, f"[REJECT] {ref}: status tidak kembali "
                                   "waiting-confirmation dalam 60 detik — "
@@ -4881,6 +4981,8 @@ class App(tk.Tk):
             # Sengaja TANPA delay acak: job yang tawarannya ditolak langsung
             # diperebutkan semua worker, tiap ratusan ms berarti.
             if self.is_paused:
+                return
+            if not self._auto_gate(ref):
                 return
 
             self.ui(self.log, f"[AUTO] {ref} ditolak client tapi memenuhi "
