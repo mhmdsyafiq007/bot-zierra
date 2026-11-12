@@ -39,7 +39,8 @@ except ImportError:
     keyboard = None
 
 from browser_actions import (BrowserActions, compute_tawar_price,
-                             compute_tawar_price_from_client)
+                             compute_tawar_price_from_client,
+                             ORDER_MIN_TS_MS)
 
 
 # ---------------------------------------------------------------- paths
@@ -152,7 +153,7 @@ MAX_BACKFILL_TRIES = 5    # batas cek ulang data kurang per job proses
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.25"
+APP_VERSION = "1.17.26"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -3340,7 +3341,7 @@ class App(tk.Tk):
                     "harga_tawar": "",
                     "deadline": info.get("deadline") or "-",
                     "url": "",
-                    "status": str(o.get("status") or "process"),
+                    "status": str(o.get("status") or "paid"),
                     "time": _dt.now().strftime("%H:%M"),
                     "id": o["id"],
                     "collection": o["collection"],
@@ -3613,7 +3614,19 @@ class App(tk.Tk):
         if data.get("job_notes_date") != today:
             return []
         notes = data.get("job_notes")
-        return notes if isinstance(notes, list) else []
+        if not isinstance(notes, list):
+            return []
+        # Buang catatan job lama (data tanggalnya semua sebelum batas
+        # ORDER_MIN_TS_MS) yang terlanjur tersimpan dari versi sebelumnya.
+        cutoff_s = ORDER_MIN_TS_MS / 1000
+
+        def _too_old(n):
+            if not isinstance(n, dict):
+                return False
+            ts = [t for t in (n.get("deadline_ts"), n.get("updated_ts"))
+                  if isinstance(t, (int, float)) and t > 0]
+            return bool(ts) and max(ts) < cutoff_s
+        return [n for n in notes if not _too_old(n)]
 
     def save_job_notes(self):
         from datetime import datetime as _dt

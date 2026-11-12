@@ -1,6 +1,6 @@
 {
-  "version": "1.17.25",
+  "version": "1.17.26",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Hemat request: sinkron job proses tidak lagi mengambil order lama. Order yang tanggal diubah, dibuat, dan deadline-nya semua sebelum 1 Juli 2026 dilewati, dan paging daftar order berhenti begitu satu halaman penuh berisi order lama. Sebelumnya: pengaman Jeda auto (bawaan 10 menit) & Maks/jam di panel Auto Terima, serta polling job proses yang lebih hemat."
+  "notes": "Sinkron job proses hanya membawa order dari 1 Agustus 2026 ke atas (job Juli tidak lagi masuk; catatan lama yang terlanjur tersimpan ikut dibuang). Status yang disinkronkan: paid, process, dan processing. Sebelumnya: pengaman Jeda auto (bawaan 10 menit) & Maks/jam, serta polling yang lebih hemat."
 }

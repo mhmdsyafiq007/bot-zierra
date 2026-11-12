@@ -39,8 +39,8 @@ DEBUG_ADDRESS = "127.0.0.1:9222"
 WAIT_TIMEOUT = 6
 
 # Order yang tanggal diubah, dibuat, DAN deadline-nya semua SEBELUM tanggal
-# ini tidak diambil dari daftar order (hemat request & waktu sinkron). 1 Juli 2026 00:00 WIB.
-ORDER_MIN_TS_MS = 1782838800000   # = 2026-06-30T17:00:00Z
+# ini tidak diambil dari daftar order (hemat request & waktu sinkron). Batas: 1 Agustus 2026 00:00 WIB.
+ORDER_MIN_TS_MS = 1785517200000   # = 2026-07-31T17:00:00Z (1 Agustus 2026 00:00 WIB)
 
 ADMIN_HOME = "https://admin.kawalu.id/admin/dashboard"
 
@@ -966,7 +966,10 @@ class BrowserActions:
         found = []
         for o in result.get("orders") or []:
             st = str(o.get("status") or "").strip().lower()
-            if st in ("process", "processing") and o.get("id") and o.get("ref"):
+            # Sistem baru: job yang sedang dikerjakan berstatus "paid";
+            # sistem lama "process"/"processing" (order lama sudah tersaring
+            # oleh batas tanggal ORDER_MIN_TS_MS).
+            if st in ("paid", "process", "processing") and o.get("id") and o.get("ref"):
                 found.append(o)
         return found, None
 
