@@ -220,6 +220,9 @@ class BrowserActions:
         self.api = _Channel("api")
         self.view = _Channel("view")
         self._launch_lock = threading.Lock()
+        # Koleksi yang endpoint confirm-nya terbukti tidak valid (membalas
+        # HTML/404) di sesi ini -> Terima langsung lewat klik DOM.
+        self._confirm_api_bad = set()
 
     # ------------------------------------------------------------ browser
     def _connect(self):
@@ -664,7 +667,14 @@ class BrowserActions:
         },
         body: JSON.stringify({ref: ref, confirm: 'accepted', reason: ''})
     }).then(function(r){
-        return r.json().then(function(data){ return {status: r.status, data: data}; });
+        // Baca sebagai teks dulu: endpoint yang salah/belum ada biasanya
+        // membalas halaman HTML (404), bukan JSON.
+        return r.text().then(function(t){
+            var data = null, nonjson = false;
+            try { data = JSON.parse(t); } catch (e) { nonjson = true; }
+            return {status: r.status, data: data, nonjson: nonjson,
+                    snippet: nonjson ? String(t).slice(0, 60) : null};
+        });
     }).then(function(result){ cb(result); })
       .catch(function(err){ cb({error: String(err)}); });
     """
@@ -980,6 +990,10 @@ class BrowserActions:
         ulang dan dicoba sekali lagi otomatis sebelum nyerah."""
         spec = COLLECTION_FIELDS.get(collection, COLLECTION_FIELDS["parafrases"])
         endpoint = spec["endpoint"]
+        # Endpoint koleksi ini sudah terbukti tidak valid di sesi ini ->
+        # langsung klik DOM, tanpa membuang satu request lagi.
+        if collection in self._confirm_api_bad:
+            return self.do_terima(url)
         try:
             result = self._run_authed_fetch(
                 self.FETCH_CONFIRM_JS, url, ref, endpoint
@@ -997,6 +1011,17 @@ class BrowserActions:
         err = self._check_common_errors(result, "Terima")
         if err:
             return False, err
+
+        if result.get("nonjson") or result.get("status") in (404, 405):
+            # Server membalas HTML/404: endpoint confirm koleksi ini
+            # (lihat COLLECTION_FIELDS) belum benar. Jangan gagal — klik
+            # tombol Terima di tab job (jalur DOM), dan ingat supaya
+            # job berikutnya langsung ke jalur itu.
+            self._confirm_api_bad.add(collection)
+            self.log(f"[API] Endpoint Terima '{endpoint}' tidak valid "
+                     f"(HTTP {result.get('status')}) — beralih ke klik "
+                     "tombol Terima di tab job.", "err")
+            return self.do_terima(url)
 
         data = result.get("data", {}) or {}
         if data.get("success"):

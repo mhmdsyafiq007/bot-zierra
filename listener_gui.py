@@ -153,7 +153,7 @@ MAX_BACKFILL_TRIES = 5    # batas cek ulang data kurang per job proses
 # file JSON publik berisi mis. {"version": "1.1.0", "url": "https://...",
 # "notes": "..."} — misalnya raw.githubusercontent.com kalau exe-nya
 # dibagikan lewat repo GitHub. Dicek sekali tiap aplikasi dibuka.
-APP_VERSION = "1.17.26"
+APP_VERSION = "1.17.27"
 UPDATE_CHECK_URL = ("https://raw.githubusercontent.com/mhmdsyafiq007/"
                      "bot-zierra/main/version.json")
 
@@ -318,7 +318,7 @@ class Field(tk.Frame):
 TIP_AUTO_TERIMA = (
     'Kalau aktif, job baru yang memenuhi SEMUA syarat di bawah di-Terima otomatis setelah jeda acak (Delay). '
     'Auto Tawar dicek lebih dulu; Auto Terima jadi cadangan kalau job tidak ditawar. '
-    'Tawaran yang ditolak client (pesan REJECT NEGO) dan kembali waiting-confirmation juga langsung di-Terima kalau memenuhi syarat ini. '
+    'Tawaran KITA yang berhasil terkirim lalu ditolak client (pesan REJECT NEGO) dan kembali waiting-confirmation juga langsung di-Terima kalau memenuhi syarat ini. Tawaran orang lain diabaikan. '
     'Contoh: syarat Target min 17, Client min 74%, Harga Client min 70.000. Job dengan Target 20, client 80.000, estimasi 100.000 (80%) -> diterima. Job client 60.000 -> dilewati (di bawah 70.000).'
 )
 TIP_AUTO_TAWAR = (
@@ -660,6 +660,11 @@ class App(tk.Tk):
         # diproses ganda kalau pesannya datang berulang.
         self.known_jobs = {}
         self._reject_inflight = set()
+        # Ref job yang BERHASIL kita tawar (ref -> waktu). REJECT NEGO
+        # hanya ditindaklanjuti untuk ref di sini; tawaran orang lain
+        # diabaikan total. Disimpan di config (TTL 24 jam) supaya tetap
+        # dikenali kalau aplikasi dibuka ulang.
+        self.tawar_sent = self._load_tawar_sent()
         self._watch_resumed = False
 
         self.sound_volume = self.load_sound_volume()
@@ -4501,6 +4506,9 @@ class App(tk.Tk):
         status job itu untuk fitur Catatan Job Proses."""
         success, message = fn(*args)
         self.ui(self._show_result_alert, success, message)
+        if (success and job_snapshot
+                and job_snapshot.get("watch_mode") == "tawar"):
+            self.ui(self._record_tawar, job_snapshot.get("ref"))
         if success and job_snapshot:
             threading.Thread(target=self._watch_job_status,
                              args=(job_snapshot,), daemon=True).start()
@@ -4924,6 +4932,35 @@ class App(tk.Tk):
             ).start()
 
     # ------------------------------------------------------ REJECT NEGO
+    TAWAR_SENT_TTL = 24 * 3600
+
+    def _load_tawar_sent(self):
+        try:
+            raw = self._read_raw_config().get("tawar_sent")
+            now = time.time()
+            if isinstance(raw, dict):
+                return {str(k): float(v) for k, v in raw.items()
+                        if isinstance(v, (int, float))
+                        and now - v < self.TAWAR_SENT_TTL}
+        except Exception:                          # noqa: BLE001
+            pass
+        return {}
+
+    def _record_tawar(self, ref):
+        """Catat ref yang tawarnya BERHASIL terkirim (jalankan di thread UI)."""
+        if not ref:
+            return
+        now = time.time()
+        self.tawar_sent = {k: v for k, v in self.tawar_sent.items()
+                           if now - v < self.TAWAR_SENT_TTL}
+        self.tawar_sent[ref] = now
+        try:
+            data = self._read_raw_config()
+            data["tawar_sent"] = self.tawar_sent
+            self._write_raw_config(data)
+        except Exception:                          # noqa: BLE001
+            pass
+
     def _handle_reject_nego(self, text):
         """Pesan REJECT NEGO = client menolak tawaran kita, dan status
         order akan kembali ke waiting-confirmation. Kalau job itu
@@ -4935,6 +4972,11 @@ class App(tk.Tk):
         if not ref:
             self.log("[REJECT] Pesan REJECT NEGO masuk tapi Ref tidak "
                      "terbaca: " + text[:120].replace("\n", " | "), "err")
+            return
+        # Hanya tawaran KITA yang berhasil terkirim yang ditindaklanjuti;
+        # tawaran orang lain diabaikan diam-diam (tanpa log & tanpa request).
+        t_sent = self.tawar_sent.get(ref)
+        if not t_sent or time.time() - t_sent > self.TAWAR_SENT_TTL:
             return
         if not self.auto_enabled:
             self.log(f"[REJECT] Tawaran {ref} ditolak client (Auto Terima "
@@ -4953,6 +4995,17 @@ class App(tk.Tk):
             return
         if ref in self._reject_inflight:
             return  # ref ini sedang diproses
+        # Notif REJECT NEGO datang untuk SEMUA tawaran di grup (bukan cuma
+        # milik kita) — job yang dilepas siapa pun jadi rebutan. Kalau
+        # jenisnya tidak punya Auto Terima aktif, tidak perlu ambil data
+        # sama sekali.
+        jenis = {"PARAFRASE": "Parafrase", "HUMANIZER": "Humanizer",
+                 "FIXFILE": "Fix File"}.get(ref.split("-")[0].upper())
+        jset = self.auto_jenis_settings.get(jenis) if jenis else None
+        if jenis and (not jset or not jset.get("enabled")):
+            self.log(f"[REJECT] {ref} ({jenis}): Auto Terima jenis ini "
+                     "nonaktif — dilewati.", "skip")
+            return
         self._reject_inflight.add(ref)
         self.log(f"[REJECT] Tawaran {ref} ditolak client — menunggu status "
                  "kembali waiting-confirmation...", "sys")
@@ -4976,6 +5029,14 @@ class App(tk.Tk):
                                       "job — dibatalkan.", "err")
                     return
                 status = (cur.get("status") or "").strip().lower().replace("_", "-")
+                # Syarat Auto Terima hanya bergantung pada data job (harga,
+                # deadline, dst), bukan status — jadi kalau sudah jelas
+                # TIDAK memenuhi, berhenti sekarang; tidak perlu menunggu
+                # status kembali (hemat request).
+                if complete and not self._check_auto_terima(cur):
+                    self.ui(self.log, f"[REJECT] {ref} tidak memenuhi syarat "
+                                      "Auto Terima — dilewati.", "skip")
+                    return
                 if status == "waiting-confirmation" and complete:
                     info = cur
                     break

@@ -1,6 +1,6 @@
 {
-  "version": "1.17.26",
+  "version": "1.17.27",
   "url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/latest",
   "exe_url": "https://github.com/mhmdsyafiq007/bot-zierra/releases/download/latest/BOT_by_Zierra.exe",
-  "notes": "Sinkron job proses hanya membawa order dari 1 Agustus 2026 ke atas (job Juli tidak lagi masuk; catatan lama yang terlanjur tersimpan ikut dibuang). Status yang disinkronkan: paid, process, dan processing. Sebelumnya: pengaman Jeda auto (bawaan 10 menit) & Maks/jam, serta polling yang lebih hemat."
+  "notes": "Terima Fix File: kalau endpoint API membalas HTML/404, otomatis beralih ke klik tombol Terima di tab job (dan ingat supaya job berikutnya langsung ke jalur itu). REJECT NEGO: hanya tawaran KITA yang berhasil terkirim yang ditindaklanjuti (tawaran orang lain diabaikan tanpa request); jenis tanpa Auto Terima dilewati langsung, dan syarat dicek begitu data lengkap tanpa menunggu status kembali. Catatan: tawar yang dikirim sebelum versi ini tidak dikenali oleh REJECT NEGO."
 }
